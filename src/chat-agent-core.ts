@@ -1,6 +1,9 @@
 // src/chat-agent-core.ts
 import { b } from '../baml_client';
 import type { ChatMessage } from '../baml_client/types';
+import type { StructuredResponse } from '../baml_client/types';
+import { Tool, ToolRegistry } from './tools';
+import { MemoryManager, DynamicWindowMemory } from './memory-manager';
 
 // Tipos de providers suportados
 type ProviderType = 
@@ -16,28 +19,43 @@ interface AgentConfig {
   instructions: string;
   provider: ProviderType;
   temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
+}
+
+// Interface para configuração dinâmica por chamada
+interface DynamicConfig {
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
 }
 
 // Classe para representar nosso agente de chat
 class ChatAgent {
   private config: AgentConfig;
-  private history: ChatMessage[] = [];
+  private memoryManager: MemoryManager;
+  private toolRegistry: ToolRegistry = new ToolRegistry();
 
   constructor(config: AgentConfig) {
     this.config = config;
+    this.memoryManager = new MemoryManager(new DynamicWindowMemory(4096)); // 4096 tokens de limite
   }
 
   // Método para enviar uma mensagem e obter uma resposta
-  async sendMessage(message: string): Promise<string> {
+  async sendMessage(message: string, dynamicConfig?: DynamicConfig): Promise<string> {
     try {
       // Adicionar a mensagem do usuário ao histórico
-      this.history.push({ role: 'user', content: message });
+      this.memoryManager.addMessage({ role: 'user', content: message });
 
       // Chamar a função BAML apropriada com base no provider
-      const response: string = await this.callBamlFunction(message);
+      const response: string = await this.callBamlFunction(message, dynamicConfig);
 
       // Adicionar a resposta do assistente ao histórico
-      this.history.push({ role: 'assistant', content: response });
+      this.memoryManager.addMessage({ role: 'assistant', content: response });
 
       return response;
     } catch (error) {
@@ -46,8 +64,30 @@ class ChatAgent {
     }
   }
 
+  // Método para enviar uma mensagem e obter uma resposta estruturada
+  async sendStructuredMessage(message: string): Promise<StructuredResponse> {
+    try {
+      // Adicionar a mensagem do usuário ao histórico
+      this.memoryManager.addMessage({ role: 'user', content: message });
+
+      // Chamar a função BAML para resposta estruturada
+      const response: StructuredResponse = await b.GetStructuredResponse(message);
+
+      // Adicionar a resposta do assistente ao histórico
+      this.memoryManager.addMessage({ 
+        role: 'assistant', 
+        content: `${response.answer} (Confiança: ${response.confidence})` 
+      });
+
+      return response;
+    } catch (error) {
+      console.error('Erro ao enviar mensagem estruturada:', error);
+      throw error;
+    }
+  }
+
   // Método privado para chamar a função BAML apropriada
-  private async callBamlFunction(message: string): Promise<string> {
+  private async callBamlFunction(message: string, dynamicConfig?: DynamicConfig): Promise<string> {
     switch (this.config.provider) {
       case 'openai-gpt-4o':
         return await b.ChatWithGPT4o(message);
@@ -67,12 +107,81 @@ class ChatAgent {
 
   // Método para resetar o histórico
   reset() {
-    this.history = [];
+    this.memoryManager.clear();
   }
 
   // Método para obter o histórico atual
   getHistory(): ChatMessage[] {
-    return [...this.history]; // Retorna uma cópia para evitar modificações externas
+    return this.memoryManager.getMessages();
+  }
+
+  // Métodos para gerenciamento de contexto
+  setContextVariable(key: string, value: any): void {
+    this.memoryManager.setVariable(key, value);
+  }
+
+  getContextVariable(key: string): any {
+    return this.memoryManager.getVariable(key);
+  }
+
+  getAllContextVariables(): Record<string, any> {
+    return this.memoryManager.getAllVariables();
+  }
+
+  // Métodos para gerenciamento de configuração
+  getConfig(): AgentConfig {
+    return { ...this.config };
+  }
+
+  setConfig(newConfig: Partial<AgentConfig>): void {
+    this.config = { ...this.config, ...newConfig };
+  }
+
+  // Métodos para gerenciamento de tools
+  registerTool(tool: Tool): void {
+    this.toolRegistry.register(tool);
+  }
+
+  unregisterTool(name: string): boolean {
+    return this.toolRegistry.unregister(name);
+  }
+
+  listTools(): Tool[] {
+    return this.toolRegistry.list();
+  }
+
+  async executeTool(toolName: string, args: any): Promise<any> {
+    const tool = this.toolRegistry.get(toolName);
+    if (!tool) {
+      throw new Error(`Tool '${toolName}' não encontrada`);
+    }
+
+    try {
+      // Validar parâmetros se disponíveis
+      if (tool.parameters) {
+        this.validateParameters(tool.parameters, args);
+      }
+
+      // Executar tool com timeout
+      const timeout = 30000; // 30 segundos
+      const result = await Promise.race([
+        tool.execute(args),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout na execução da tool')), timeout)
+        )
+      ]);
+
+      return result;
+    } catch (error: any) {
+      throw new Error(`Erro ao executar tool '${toolName}': ${error.message}`);
+    }
+  }
+
+  private validateParameters(schema: any, args: any): void {
+    // Implementação de validação de parâmetros
+    // Pode usar Zod, Joi, ou validação customizada
+    // Por enquanto, vamos deixar como placeholder
+    console.log('Validando parâmetros:', schema, args);
   }
 }
 
