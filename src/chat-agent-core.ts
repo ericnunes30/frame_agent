@@ -235,7 +235,4 @@ async function testChatAgent() {
   }
 }
 
-// Executar o teste
-testChatAgent().catch(console.error);
-
 export { ChatAgent, type AgentConfig, type ProviderType };

@@ -1,6 +1,6 @@
-# Construtor de Agentes com BAML
+# SDK de Agentes com BAML
 
-Este é um construtor de agentes em TypeScript que utiliza a biblioteca BAML para:
+Este é um SDK em TypeScript para criação de agentes de IA que utiliza a biblioteca BAML para:
 - Conexão com LLMs (OpenAI, Anthropic, OpenAI Compatible, etc.)
 - Montagem de prompts tipados
 - Validação/formatagem de saídas
@@ -13,8 +13,11 @@ Este é um construtor de agentes em TypeScript que utiliza a biblioteca BAML par
 │   ├── clients.baml       # Configuração de clients/providers
 │   └── simple-chat.baml   # Funções BAML
 ├── baml_client/           # Cliente TypeScript gerado pelo BAML (NÃO EDITAR)
-├── src/                   # Código TypeScript do agente
-│   └── chat-agent-core.ts # Implementação principal do agente
+├── src/                   # Código TypeScript do SDK
+│   ├── index.ts           # Ponto de entrada principal
+│   ├── chat-agent-core.ts # Implementação principal do agente
+│   ├── tools.ts           # Sistema de tools
+│   └── memory-manager.ts  # Gerenciador de memória
 ├── dist/                  # Arquivos compilados (NÃO EDITAR)
 ├── docs/                  # Documentação
 ├── tests/                 # Testes
@@ -47,15 +50,31 @@ MODEL=nome_do_modelo
 ANTHROPIC_API_KEY=sua_chave_api_anthropic
 ```
 
-### Criando um Agente
+## Instalação
+
+```bash
+npm install @ericnunes/frame_agent
+```
+
+## Uso Básico
+
 ```typescript
+import { ChatAgent } from '@ericnunes/frame_agent';
+import dotenv from 'dotenv';
+
+// Carregar variáveis de ambiente
+dotenv.config();
+
+// Criar um agente com configurações básicas
 const agent = new ChatAgent({
   name: "Assistente",
-  instructions: "Você é um assistente útil",
-  provider: "openai-generic" // Escolha um provider específico
+  instructions: "Você é um assistente útil.",
+  provider: "openai-generic" // ou outro provider suportado
 });
 
-const resposta = await agent.sendMessage("Olá, como você está?");
+// Enviar uma mensagem e obter resposta
+const response = await agent.sendMessage("Olá, qual é o seu nome?");
+console.log('Assistente:', response);
 ```
 
 ## Desenvolvimento
@@ -68,11 +87,14 @@ npm install
 # Gerar cliente BAML
 npx baml generate
 
-# Compilar TypeScript
-npx tsc
+# Compilar TypeScript (build)
+npm run build
 
-# Executar testes
-npx ts-node tests/nome-do-teste.ts
+# Executar exemplo básico
+npm run example
+
+# Desenvolvimento contínuo (watch mode)
+npm run dev
 ```
 
 ### Fluxo de Trabalho
@@ -97,4 +119,4 @@ npx ts-node tests/nome-do-teste.ts
 2. Adicionar memória de contexto (curto prazo)
 3. Implementar configuração dinâmica (modelo, temperatura, etc.)
 4. Adicionar validação de saída via schema
-5. Implementar modo streaming# frame_agent
+5. Implementar modo streaming

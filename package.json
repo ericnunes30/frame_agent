@@ -1,21 +1,52 @@
 {
-  "name": "cli_novo",
+  "name": "@ericnunes/frame_agent",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "SDK para criação de agentes de IA com suporte a múltiplos providers (OpenAI, Anthropic, etc.) usando BAML",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "baml:test": "ts-node src/baml-test.ts",
-    "baml:example": "ts-node src/baml-example.ts"
+    "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --tsconfig tsconfig.build.json",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --tsconfig tsconfig.build.json --watch",
+    "prepublishOnly": "npm run build",
+    "test": "jest",
+    "baml:generate": "baml generate",
+    "example": "ts-node examples/basic-usage.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "keywords": [
+    "ai",
+    "llm",
+    "agent",
+    "sdk",
+    "openai",
+    "anthropic",
+    "baml"
+  ],
+  "author": "BoundaryML",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ericnunes/frame_agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ericnunes/frame_agent/issues"
+  },
+  "homepage": "https://github.com/ericnunes/frame_agent#readme",
   "dependencies": {
     "@boundaryml/baml": "^0.207.1",
+    "dotenv": "^17.2.2"
+  },
+  "devDependencies": {
     "@types/node": "^24.5.2",
-    "dotenv": "^17.2.2",
-    "ts-node": "^10.9.2",
+    "tsup": "^8.0.0",
     "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
