@@ -1,0 +1,28 @@
+# Dependências
+node_modules/
+
+# Arquivos compilados
+dist/
+
+# Arquivos de ambiente
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+
+# Arquivos temporários
+tmp/
+temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# BAML
+baml_client/
