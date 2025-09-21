@@ -77,9 +77,3 @@ class ChatMessage {
   role string  // "user" ou "assistant"
   content string
 }
-
-// Classe para representar uma resposta estruturada
-class StructuredResponse {
-  answer string
-  confidence float  // 0-1
-}
