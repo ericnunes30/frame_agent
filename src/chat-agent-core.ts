@@ -17,7 +17,7 @@ type ProviderType =
 interface AgentConfig {
   name: string;
   instructions: string;
-  provider: ProviderType;
+  provider?: ProviderType;
   temperature?: number;
   topP?: number;
   maxTokens?: number;
@@ -42,12 +42,10 @@ class ChatAgent {
 
   constructor(config: AgentConfig) {
     // Definir OpenAI Generic como provider padrão se nenhum for especificado
-    const defaultConfig = {
-      provider: 'openai-generic' as ProviderType,
+    this.config = {
+      provider: 'openai-generic',
       ...config
     };
-    
-    this.config = defaultConfig;
     this.memoryManager = new MemoryManager(new DynamicWindowMemory(4096)); // 4096 tokens de limite
   }
 
