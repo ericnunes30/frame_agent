@@ -41,7 +41,13 @@ class ChatAgent {
   private toolRegistry: ToolRegistry = new ToolRegistry();
 
   constructor(config: AgentConfig) {
-    this.config = config;
+    // Definir OpenAI Generic como provider padrão se nenhum for especificado
+    const defaultConfig = {
+      provider: 'openai-generic' as ProviderType,
+      ...config
+    };
+    
+    this.config = defaultConfig;
     this.memoryManager = new MemoryManager(new DynamicWindowMemory(4096)); // 4096 tokens de limite
   }
 
@@ -100,8 +106,8 @@ class ChatAgent {
       case 'anthropic-haiku':
         return await b.ChatWithClaudeHaiku(message);
       default:
-        // Default para GPT-4o-mini
-        return await b.ChatWithGPT4oMini(message);
+        // Default para OpenAI Generic
+        return await b.ChatWithOpenAIGeneric(message);
     }
   }
 
@@ -191,8 +197,8 @@ async function testChatAgent() {
   
   // Testar com diferentes providers
   const providers: ProviderType[] = [
+    'openai-generic',  // Provider padrão
     'openai-gpt-4o-mini',
-    'openai-generic',
     'anthropic-haiku'
   ];
   
@@ -212,6 +218,22 @@ async function testChatAgent() {
     } catch (error) {
       console.error('Erro no teste:', error);
     }
+  }
+  
+  // Testar com provider padrão (sem especificar provider)
+  console.log('\n--- Testando com provider padrão (sem especificar) ---');
+  const agentPadrao = new ChatAgent({
+    name: "Assistente",
+    instructions: "Você é um assistente útil"
+    // Sem especificar provider - deve usar 'openai-generic' como padrão
+  });
+  
+  try {
+    const response = await agentPadrao.sendMessage('Olá, qual é o seu nome?');
+    console.log('Usuário: Olá, qual é o seu nome?');
+    console.log('Assistente:', response);
+  } catch (error) {
+    console.error('Erro no teste:', error);
   }
 }
 

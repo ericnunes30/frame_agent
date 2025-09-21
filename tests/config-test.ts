@@ -9,7 +9,7 @@ async function testConfig() {
   const agent = new ChatAgent({
     name: "Assistente",
     instructions: "Você é um assistente útil",
-    provider: "openai-gpt-4o-mini",
+    provider: "openai-generic",
     temperature: 0.7
   });
   

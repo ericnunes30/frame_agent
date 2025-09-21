@@ -1,1 +1,43 @@
-// tests/tools-test.ts\n// Teste para o sistema de tools\n\nimport { ChatAgent } from '../src/chat-agent-core';\nimport { calculatorTool, dateTimeTool, weatherTool } from '../src/example-tools';\n\nasync function testTools() {\n  console.log('=== TESTE DO SISTEMA DE TOOLS ===');\n  \n  const agent = new ChatAgent({\n    name: \"Assistente\",\n    instructions: \"Você é um assistente útil\",\n    provider: \"openai-gpt-4o-mini\"\n  });\n  \n  // Registrar tools\n  agent.registerTool(calculatorTool);\n  agent.registerTool(dateTimeTool);\n  agent.registerTool(weatherTool);\n  \n  console.log('Tools registradas:', agent.listTools().map(t => t.name));\n  \n  // Testar execução de tools\n  try {\n    console.log('\\n--- Testando calculadora ---');\n    const calcResult = await agent.executeTool('calculate', { expression: '2 + 2 * 3' });\n    console.log('Resultado da calculadora:', calcResult);\n    \n    console.log('\\n--- Testando data/hora ---');\n    const dateTimeResult = await agent.executeTool('get_current_datetime', {});\n    console.log('Resultado de data/hora:', dateTimeResult);\n    \n    console.log('\\n--- Testando clima ---');\n    const weatherResult = await agent.executeTool('get_weather', { location: 'São Paulo' });\n    console.log('Resultado do clima:', weatherResult);\n    \n    console.log('\\n✅ Todos os testes de tools passaram!');\n  } catch (error) {\n    console.error('❌ Erro nos testes de tools:', error);\n  }\n}\n\ntestTools().catch(console.error);
+// tests/tools-test.ts
+// Teste para o sistema de tools
+
+import { ChatAgent } from '../src/chat-agent-core';
+import { calculatorTool, dateTimeTool, weatherTool } from '../examples/example-tools';
+
+async function testTools() {
+  console.log('=== TESTE DO SISTEMA DE TOOLS ===');
+  
+  const agent = new ChatAgent({
+    name: "Assistente",
+    instructions: "Você é um assistente útil",
+    provider: "openai-generic"
+  });
+  
+  // Registrar tools
+  agent.registerTool(calculatorTool);
+  agent.registerTool(dateTimeTool);
+  agent.registerTool(weatherTool);
+  
+  console.log('Tools registradas:', agent.listTools().map(t => t.name));
+  
+  // Testar execução de tools
+  try {
+    console.log('\n--- Testando calculadora ---');
+    const calcResult = await agent.executeTool('calculate', { expression: '2 + 2 * 3' });
+    console.log('Resultado da calculadora:', calcResult);
+    
+    console.log('\n--- Testando data/hora ---');
+    const dateTimeResult = await agent.executeTool('get_current_datetime', {});
+    console.log('Resultado de data/hora:', dateTimeResult);
+    
+    console.log('\n--- Testando clima ---');
+    const weatherResult = await agent.executeTool('get_weather', { location: 'São Paulo' });
+    console.log('Resultado do clima:', weatherResult);
+    
+    console.log('\n✅ Todos os testes de tools passaram!');
+  } catch (error) {
+    console.error('❌ Erro nos testes de tools:', error);
+  }
+}
+
+testTools().catch(console.error);

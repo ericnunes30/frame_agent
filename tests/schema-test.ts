@@ -9,7 +9,7 @@ async function testSchema() {
   const agent = new ChatAgent({
     name: "Assistente",
     instructions: "Você é um assistente útil",
-    provider: "openai-gpt-4o-mini"
+    provider: "openai-generic"
   });
   
   // Testar envio de mensagem com resposta estruturada
