@@ -11,6 +11,7 @@ dist/
 
 # Logs
 *.log
+logs.md
 
 # Arquivos temporários
 tmp/
