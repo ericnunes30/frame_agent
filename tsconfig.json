@@ -24,6 +24,7 @@
     "node_modules", 
     "dist", 
     "examples",
-    "src/index.ts"
+    "src/index.ts",
+    "baml_client"
   ]
 }
