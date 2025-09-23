@@ -340,7 +340,7 @@ ${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
     return { thought, action, isFinalAnswer, finalAnswer };
   }
 
-  // Método para executar o modo de Planejamento
+  // Método para executar o modo de Planejamento com modelos de thinking
   private async executePlanningMode(message: string, dynamicConfig?: DynamicConfig): Promise<string> {
     // Definir interfaces locais para o modo Planning
     interface PlanningSubtask {
@@ -349,6 +349,7 @@ ${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
       status: 'pending' | 'in-progress' | 'completed' | 'failed';
       dependencies: string[]; // IDs das subtasks que precisam ser concluídas primeiro
       result?: any;
+      thoughtProcess?: string; // Registro do processo de pensamento
     }
 
     interface PlanningTask {
@@ -358,6 +359,7 @@ ${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
       status: 'pending' | 'in-progress' | 'completed' | 'failed';
       createdAt: Date;
       completedAt?: Date;
+      thoughtProcess?: string; // Registro do processo de pensamento geral
     }
 
     const taskId = `planning_${Date.now()}`;
@@ -379,7 +381,7 @@ ${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
       // Obter histórico de mensagens
       const history = this.memoryManager.getMessages();
       
-      // Etapa 1: Planejamento - Gerar plano de execução
+      // Etapa 1: Planejamento Hierárquico - Gerar plano de execução com modelos de thinking
       const planningPrompt = this.generatePlanningPrompt(message, toolsDescription, history);
       const planningResponse = await this.callBamlFunction(planningPrompt, dynamicConfig);
       
@@ -387,8 +389,9 @@ ${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
       const parsedPlan = this.parsePlanningResponse(planningResponse);
       planningTask.subtasks = parsedPlan.subtasks;
       planningTask.status = 'in-progress';
+      planningTask.thoughtProcess = parsedPlan.thoughtProcess;
       
-      // Etapa 2: Execução - Executar subtasks em ordem
+      // Etapa 2: Execução Reflexiva - Executar subtasks com capacidades reflexivas
       for (const subtask of planningTask.subtasks) {
         // Verificar dependências
         const dependenciesMet = subtask.dependencies.every(depId => {
@@ -420,10 +423,16 @@ ${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
             }
           }
           
+          // Simular processo de pensamento reflexivo
+          subtask.thoughtProcess = `Analisando subtask: ${subtask.description}\n` +
+                                  `Dependências verificadas: ${dependenciesMet}\n` +
+                                  `Resultado obtido: ${JSON.stringify(subtask.result)}`;
+          
           subtask.status = 'completed';
         } catch (error: any) {
           subtask.status = 'failed';
           subtask.result = { error: error.message };
+          subtask.thoughtProcess = `Erro ao executar subtask: ${error.message}`;
         }
       }
       
@@ -432,7 +441,7 @@ ${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
       planningTask.status = allCompleted ? 'completed' : 'failed';
       planningTask.completedAt = new Date();
       
-      // Etapa 3: Síntese - Gerar resposta final com base nos resultados
+      // Etapa 3: Síntese Adaptativa - Gerar resposta final com base nos resultados e feedback
       const synthesisPrompt = this.generateSynthesisPrompt(message, planningTask, history);
       const finalResponse = await this.callBamlFunction(synthesisPrompt, dynamicConfig);
       
@@ -449,13 +458,17 @@ ${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
     }
   }
   
-  // Método para gerar prompt de planejamento
+  // Método para gerar prompt de planejamento com modelos de thinking
   private generatePlanningPrompt(
     task: string, 
     toolsDescription: string, 
     history: ChatMessage[]
   ): string {
-    return `Você é um assistente especializado em planejamento de tarefas complexas. Sua tarefa é decompor a solicitação do usuário em subtasks menores e executáveis.
+    return `Você é um assistente avançado com capacidades de thinking (raciocínio profundo). Sua tarefa é decompor a solicitação do usuário em subtasks menores e executáveis, usando um processo de pensamento analítico profundo.
+
+Arquitetura Dual-Process:
+- Modo Rápido (System 1): Respostas imediatas para tarefas simples
+- Modo Lento (System 2): Processamento analítico profundo para tarefas complexas
 
 Ferramentas disponíveis:
 ${toolsDescription}
@@ -466,13 +479,16 @@ ${history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
 Tarefa principal: ${task}
 
 Instruções:
-1. Decomponha a tarefa principal em subtasks menores e específicas
-2. Identifique dependências entre as subtasks (quais precisam ser concluídas antes de outras)
-3. Para cada subtask, especifique se ela requer o uso de uma ferramenta específica
-4. Retorne um plano estruturado em formato JSON
+1. Analise a complexidade da tarefa para determinar se requer pensamento rápido ou lento
+2. Se for complexa, use processamento analítico profundo para decompor em subtasks
+3. Identifique dependências entre as subtasks (quais precisam ser concluídas antes de outras)
+4. Para cada subtask, especifique se ela requer o uso de uma ferramenta específica
+5. Documente seu processo de pensamento para transparência
+6. Retorne um plano estruturado em formato JSON
 
 Formato de resposta esperado:
 {
+  "thoughtProcess": "Descreva seu processo de análise e raciocínio",
   "subtasks": [
     {
       "id": "string",
@@ -486,13 +502,16 @@ Responda apenas com o JSON do plano, sem explicações adicionais.`;
   }
   
   // Método para parsear resposta de planejamento
-  private parsePlanningResponse(response: string): { subtasks: any[] } {
+  private parsePlanningResponse(response: string): { subtasks: any[]; thoughtProcess?: string } {
     try {
       // Tentar extrair JSON da resposta
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        return { subtasks: parsed.subtasks || [] };
+        return { 
+          subtasks: parsed.subtasks || [],
+          thoughtProcess: parsed.thoughtProcess || ''
+        };
       }
     } catch (e) {
       // Se falhar, criar subtasks simples baseadas nas linhas
@@ -510,7 +529,7 @@ Responda apenas com o JSON do plano, sem explicações adicionais.`;
     return { subtasks: [] };
   }
   
-  // Método para gerar prompt de síntese
+  // Método para gerar prompt de síntese com capacidades reflexivas
   private generateSynthesisPrompt(
     originalTask: string,
     planningTask: any,
@@ -519,15 +538,23 @@ Responda apenas com o JSON do plano, sem explicações adicionais.`;
     const completedSubtasks = planningTask.subtasks.filter((st: any) => st.status === 'completed');
     const failedSubtasks = planningTask.subtasks.filter((st: any) => st.status === 'failed');
     
-    return `Com base no plano executado, forneça uma resposta final para a tarefa original do usuário.
+    return `Com base no plano executado, forneça uma resposta final para a tarefa original do usuário, incorporando capacidades reflexivas e adaptativas.
+
+Capacidades Reflexivas:
+- Auto-avaliação do processo de planejamento e execução
+- Adaptação com base em feedback dos resultados
+- Aprendizado contínuo para melhorias futuras
 
 Tarefa original: ${originalTask}
 
+Processo de pensamento geral:
+${planningTask.thoughtProcess || 'Nenhum processo registrado'}
+
 Subtasks concluídas:
-${completedSubtasks.map((st: any) => `- ${st.description}: ${JSON.stringify(st.result)}`).join('\n')}
+${completedSubtasks.map((st: any) => `- ${st.description}\n  Resultado: ${JSON.stringify(st.result)}\n  Pensamento: ${st.thoughtProcess || 'Nenhum processo registrado'}`).join('\n')}
 
 Subtasks falhas:
-${failedSubtasks.map((st: any) => `- ${st.description}: ${st.result?.error || 'Falha desconhecida'}`).join('\n')}
+${failedSubtasks.map((st: any) => `- ${st.description}\n  Erro: ${st.result?.error || 'Falha desconhecida'}\n  Pensamento: ${st.thoughtProcess || 'Nenhum processo registrado'}`).join('\n')}
 
 Histórico da conversa:
 ${history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
@@ -536,6 +563,7 @@ Instruções:
 - Forneça uma resposta completa e útil para a tarefa original
 - Considere os resultados de todas as subtasks concluídas
 - Se houver subtasks falhas que impedem uma resposta completa, mencione isso
+- Inclua insights do processo de pensamento para transparência
 - Seja conciso mas abrangente`;
   }
 

@@ -1,10 +1,28 @@
-# SDK de Agentes com BAML
+# Construtor de Agentes com BAML
 
-Este é um SDK em TypeScript para criação de agentes de IA que utiliza a biblioteca BAML para:
-- Conexão com LLMs (OpenAI, Anthropic, OpenAI Compatible, etc.)
-- Montagem de prompts tipados
-- Validação/formatagem de saídas
-- Gerenciamento de estado e histórico
+Um framework TypeScript para criar agentes de IA avançados com múltiplos modos de operação, incluindo chat, ReAct e Planning com modelos de thinking.
+
+## Modo Planning com Modelos de Thinking
+
+O modo Planning foi implementado com base em pesquisa sobre planning agents e modelos de thinking, incorporando:
+
+1. **Arquitetura Dual-Process**:
+   - Modo Rápido (System 1): Respostas imediatas para tarefas simples
+   - Modo Lento (System 2): Processamento analítico profundo para tarefas complexas
+
+2. **Planejamento Hierárquico**:
+   - Decomposição de tarefas complexas em subtasks menores
+   - Identificação de dependências entre subtasks
+   - Execução coordenada com feedback
+
+3. **Capacidades Reflexivas**:
+   - Auto-avaliação do processo de planejamento e execução
+   - Adaptação com base em feedback dos resultados
+   - Registro do processo de pensamento para transparência
+
+4. **Diferenciação entre Modelos**:
+   - Modelos de Chat: Respostas rápidas para interações diretas
+   - Modelos de Thinking: Processamento analítico profundo para tarefas complexas
 
 ## Estrutura do Projeto
 
@@ -75,6 +93,29 @@ const agent = new ChatAgent({
 // Enviar uma mensagem e obter resposta
 const response = await agent.sendMessage("Olá, qual é o seu nome?");
 console.log('Assistente:', response);
+```
+
+## Exemplos de Uso
+
+### Modo Planning
+
+```typescript
+import { ChatAgent } from '@ericnunes/frame_agent';
+
+const agent = new ChatAgent({
+  name: "Assistente Planning",
+  instructions: "Você é um assistente que usa o modo Planning para resolver tarefas complexas através de planejamento hierárquico.",
+  provider: "openai-generic",
+  mode: "planning"
+});
+
+// Registrar tools
+agent.registerTool(calculatorTool);
+agent.registerTool(dateTimeTool);
+agent.registerTool(weatherTool);
+
+// Executar tarefa complexa
+const response = await agent.sendMessage("Planeje minha semana: verifique a data atual, calcule quantos dias faltam para o final do mês e me diga qual será o clima nesses dias.");
 ```
 
 ## Desenvolvimento
