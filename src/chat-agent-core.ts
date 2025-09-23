@@ -13,11 +13,39 @@ type ProviderType =
   | 'anthropic-sonnet'
   | 'anthropic-haiku';
 
+// Tipos de modos de agente
+type AgentMode = 'chat' | 'react' | 'planning';
+
+// Interfaces para o modo ReAct
+interface ReActAction {
+  name: string;
+  input: any;
+}
+
+interface ReActStep {
+  stepNumber: number;
+  thought: string;
+  action?: ReActAction;
+  observation?: any;
+  timestamp: Date;
+}
+
+interface ReActProcess {
+  taskId: string;
+  taskDescription: string;
+  steps: ReActStep[];
+  finalAnswer?: string;
+  status: 'running' | 'completed' | 'failed';
+  startTime: Date;
+  endTime?: Date;
+}
+
 // Interface para a configuração do agente
 interface AgentConfig {
   name: string;
   instructions: string;
   provider?: ProviderType;
+  mode?: AgentMode;
   temperature?: number;
   topP?: number;
   maxTokens?: number;
@@ -42,8 +70,10 @@ class ChatAgent {
 
   constructor(config: AgentConfig) {
     // Definir OpenAI Generic como provider padrão se nenhum for especificado
+    // Definir 'chat' como modo padrão se nenhum for especificado
     this.config = {
       provider: 'openai-generic',
+      mode: 'chat',
       ...config
     };
     this.memoryManager = new MemoryManager(new DynamicWindowMemory(4096)); // 4096 tokens de limite
@@ -55,8 +85,8 @@ class ChatAgent {
       // Adicionar a mensagem do usuário ao histórico
       this.memoryManager.addMessage({ role: 'user', content: message });
 
-      // Chamar a função BAML apropriada com base no provider
-      const response: string = await this.callBamlFunction(message, dynamicConfig);
+      // Chamar a função apropriada com base no modo do agente
+      const response: string = await this.callAgentModeFunction(message, dynamicConfig);
 
       // Adicionar a resposta do assistente ao histórico
       this.memoryManager.addMessage({ role: 'assistant', content: response });
@@ -107,6 +137,406 @@ class ChatAgent {
         // Default para OpenAI Generic
         return await b.ChatWithOpenAIGeneric(message);
     }
+  }
+
+  // Método privado para chamar a função apropriada com base no modo do agente
+  private async callAgentModeFunction(message: string, dynamicConfig?: DynamicConfig): Promise<string> {
+    switch (this.config.mode) {
+      case 'react':
+        return await this.executeReactMode(message, dynamicConfig);
+      case 'planning':
+        return await this.executePlanningMode(message, dynamicConfig);
+      case 'chat':
+      default:
+        // Default para modo chat
+        return await this.callBamlFunction(message, dynamicConfig);
+    }
+  }
+
+  // Método para executar o modo ReAct
+  private async executeReactMode(message: string, dynamicConfig?: DynamicConfig): Promise<string> {
+    const processId = `react_${Date.now()}`;
+    const reactProcess: ReActProcess = {
+      taskId: processId,
+      taskDescription: message,
+      steps: [],
+      status: 'running',
+      startTime: new Date()
+    };
+    
+    try {
+      // Obter tools registradas
+      const availableTools = this.toolRegistry.list();
+      
+      // Gerar descrição das tools para o prompt
+      const toolsDescription = this.generateToolsDescription(availableTools);
+      
+      // Obter histórico de mensagens
+      const history = this.memoryManager.getMessages();
+      
+      // Executar ciclo ReAct (máximo de 10 passos)
+      for (let step = 0; step < 10; step++) {
+        // Criar prompt ReAct com contexto atual
+        const reactPrompt = this.generateReActPrompt(
+          message, 
+          toolsDescription, 
+          reactProcess.steps,
+          history
+        );
+        
+        // Chamar LLM para gerar próximo passo
+        const llmResponse = await this.callBamlFunction(reactPrompt, dynamicConfig);
+        
+        // Parse da resposta para extrair Thought/Action
+        const parsedResponse = this.parseReActResponse(llmResponse);
+        
+        // Adicionar passo ao processo
+        const reactStep: ReActStep = {
+          stepNumber: step + 1,
+          thought: parsedResponse.thought,
+          action: parsedResponse.action,
+          timestamp: new Date()
+        };
+        
+        reactProcess.steps.push(reactStep);
+        
+        // Executar ação se houver
+        if (parsedResponse.action) {
+          try {
+            const observation = await this.executeTool(
+              parsedResponse.action.name, 
+              parsedResponse.action.input
+            );
+            reactStep.observation = observation;
+          } catch (error: any) {
+            reactStep.observation = { error: error.message };
+          }
+        }
+        
+        // Verificar se é a resposta final
+        if (parsedResponse.isFinalAnswer) {
+          reactProcess.finalAnswer = parsedResponse.finalAnswer;
+          reactProcess.status = 'completed';
+          reactProcess.endTime = new Date();
+          break;
+        }
+        
+        // Verificar se atingiu o limite de passos
+        if (step === 9) {
+          reactProcess.status = 'failed';
+          reactProcess.endTime = new Date();
+          reactProcess.finalAnswer = "Não foi possível encontrar uma resposta após 10 passos.";
+        }
+      }
+      
+      // Armazenar processo na memória
+      this.memoryManager.setVariable(`react_process_${processId}`, reactProcess);
+      
+      return reactProcess.finalAnswer || "Não foi possível determinar uma resposta final.";
+      
+    } catch (error) {
+      reactProcess.status = 'failed';
+      reactProcess.endTime = new Date();
+      this.memoryManager.setVariable(`react_process_${processId}`, reactProcess);
+      throw error;
+    }
+  }
+  
+  // Método para gerar descrição das tools para o prompt
+  private generateToolsDescription(tools: Tool[]): string {
+    if (tools.length === 0) {
+      return "Nenhuma ferramenta disponível.";
+    }
+    
+    return tools.map(tool => 
+      `${tool.name}: ${tool.description}${tool.parameters ? 
+        ` Parâmetros: ${JSON.stringify(tool.parameters.properties)}` : ''}`
+    ).join('\n');
+  }
+  
+  // Método para gerar prompt ReAct
+  private generateReActPrompt(
+    task: string, 
+    toolsDescription: string, 
+    steps: ReActStep[],
+    history: ChatMessage[]
+  ): string {
+    // Construir histórico de passos ReAct
+    const stepsHistory = steps.map(step => 
+      `Thought ${step.stepNumber}: ${step.thought}\n` +
+      (step.action ? 
+        `Action ${step.stepNumber}: ${step.action.name}[${JSON.stringify(step.action.input)}]\n` : '') +
+      (step.observation ? 
+        `Observation ${step.stepNumber}: ${JSON.stringify(step.observation)}\n` : '')
+    ).join('\n');
+    
+    return `Use o framework ReAct (Reasoning + Action) para resolver a tarefa a seguir. Pense passo a passo, e quando precisar reunir informações ou realizar cálculos, use as ferramentas disponíveis.
+
+Ferramentas disponíveis:
+${toolsDescription}
+
+Histórico da conversa:
+${history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
+
+Tarefa: ${task}
+
+Use o seguinte formato:
+Thought: Seu raciocínio sobre a tarefa e o próximo passo
+Action: A ferramenta a ser usada (deve ser uma das: ${this.toolRegistry.list().map(t => t.name).join(', ')})
+Action Input: A entrada para a ferramenta (formato JSON)
+Observation: O resultado da execução da ferramenta
+... (repita Thought/Action/Action Input/Observation conforme necessário)
+Thought: Agora sei a resposta final
+Final Answer: A resposta completa para a tarefa original
+
+${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
+`;
+  }
+  
+  // Método para parsear resposta ReAct
+  private parseReActResponse(response: string): {
+    thought: string;
+    action?: ReActAction;
+    isFinalAnswer: boolean;
+    finalAnswer?: string;
+  } {
+    // Esta é uma implementação simplificada
+    // Em produção, você pode querer usar uma abordagem mais robusta com regex ou parsing
+    
+    const lines = response.split('\n');
+    let thought = '';
+    let action: ReActAction | undefined;
+    let isFinalAnswer = false;
+    let finalAnswer = '';
+    
+    // Extrair Thought (primeira linha que começa com "Thought:")
+    const thoughtLine = lines.find(line => line.trim().startsWith('Thought:'));
+    if (thoughtLine) {
+      thought = thoughtLine.replace('Thought:', '').trim();
+    }
+    
+    // Verificar se é resposta final
+    const finalAnswerLine = lines.find(line => line.trim().startsWith('Final Answer:'));
+    if (finalAnswerLine) {
+      isFinalAnswer = true;
+      finalAnswer = finalAnswerLine.replace('Final Answer:', '').trim();
+    } else {
+      // Extrair Action se não for resposta final
+      const actionLine = lines.find(line => line.trim().startsWith('Action:'));
+      const actionInputLine = lines.find(line => line.trim().startsWith('Action Input:'));
+      
+      if (actionLine && actionInputLine) {
+        const actionName = actionLine.replace('Action:', '').trim();
+        try {
+          const actionInput = JSON.parse(actionInputLine.replace('Action Input:', '').trim());
+          action = { name: actionName, input: actionInput };
+        } catch (e) {
+          // Se não conseguir parsear JSON, usar string simples
+          action = { name: actionName, input: actionInputLine.replace('Action Input:', '').trim() };
+        }
+      }
+    }
+    
+    return { thought, action, isFinalAnswer, finalAnswer };
+  }
+
+  // Método para executar o modo de Planejamento
+  private async executePlanningMode(message: string, dynamicConfig?: DynamicConfig): Promise<string> {
+    // Definir interfaces locais para o modo Planning
+    interface PlanningSubtask {
+      id: string;
+      description: string;
+      status: 'pending' | 'in-progress' | 'completed' | 'failed';
+      dependencies: string[]; // IDs das subtasks que precisam ser concluídas primeiro
+      result?: any;
+    }
+
+    interface PlanningTask {
+      id: string;
+      description: string;
+      subtasks: PlanningSubtask[];
+      status: 'pending' | 'in-progress' | 'completed' | 'failed';
+      createdAt: Date;
+      completedAt?: Date;
+    }
+
+    const taskId = `planning_${Date.now()}`;
+    const planningTask: PlanningTask = {
+      id: taskId,
+      description: message,
+      subtasks: [],
+      status: 'pending',
+      createdAt: new Date()
+    };
+    
+    try {
+      // Obter tools registradas
+      const availableTools = this.toolRegistry.list();
+      
+      // Gerar descrição das tools para o prompt
+      const toolsDescription = this.generateToolsDescription(availableTools);
+      
+      // Obter histórico de mensagens
+      const history = this.memoryManager.getMessages();
+      
+      // Etapa 1: Planejamento - Gerar plano de execução
+      const planningPrompt = this.generatePlanningPrompt(message, toolsDescription, history);
+      const planningResponse = await this.callBamlFunction(planningPrompt, dynamicConfig);
+      
+      // Parse do plano gerado
+      const parsedPlan = this.parsePlanningResponse(planningResponse);
+      planningTask.subtasks = parsedPlan.subtasks;
+      planningTask.status = 'in-progress';
+      
+      // Etapa 2: Execução - Executar subtasks em ordem
+      for (const subtask of planningTask.subtasks) {
+        // Verificar dependências
+        const dependenciesMet = subtask.dependencies.every(depId => {
+          const dep = planningTask.subtasks.find(st => st.id === depId);
+          return dep && dep.status === 'completed';
+        });
+        
+        if (!dependenciesMet) {
+          subtask.status = 'failed';
+          continue;
+        }
+        
+        subtask.status = 'in-progress';
+        
+        try {
+          // Se a subtask requer uma tool, executá-la
+          if (subtask.description.includes('usar ferramenta') || subtask.description.includes('tool')) {
+            // Extrair nome da tool e parâmetros do texto (simulação)
+            const toolMatch = subtask.description.match(/ferramenta\s+(\w+)/) || 
+                             subtask.description.match(/tool\s+(\w+)/);
+            
+            if (toolMatch && toolMatch[1]) {
+              const toolName = toolMatch[1];
+              // Parâmetros simulados - em produção seria extraído do texto
+              const toolArgs = { input: subtask.description };
+              
+              const result = await this.executeTool(toolName, toolArgs);
+              subtask.result = result;
+            }
+          }
+          
+          subtask.status = 'completed';
+        } catch (error: any) {
+          subtask.status = 'failed';
+          subtask.result = { error: error.message };
+        }
+      }
+      
+      // Verificar se todas as subtasks foram concluídas
+      const allCompleted = planningTask.subtasks.every(st => st.status === 'completed');
+      planningTask.status = allCompleted ? 'completed' : 'failed';
+      planningTask.completedAt = new Date();
+      
+      // Etapa 3: Síntese - Gerar resposta final com base nos resultados
+      const synthesisPrompt = this.generateSynthesisPrompt(message, planningTask, history);
+      const finalResponse = await this.callBamlFunction(synthesisPrompt, dynamicConfig);
+      
+      // Armazenar tarefa na memória
+      this.memoryManager.setVariable(`planning_task_${taskId}`, planningTask);
+      
+      return finalResponse;
+      
+    } catch (error) {
+      planningTask.status = 'failed';
+      planningTask.completedAt = new Date();
+      this.memoryManager.setVariable(`planning_task_${taskId}`, planningTask);
+      throw error;
+    }
+  }
+  
+  // Método para gerar prompt de planejamento
+  private generatePlanningPrompt(
+    task: string, 
+    toolsDescription: string, 
+    history: ChatMessage[]
+  ): string {
+    return `Você é um assistente especializado em planejamento de tarefas complexas. Sua tarefa é decompor a solicitação do usuário em subtasks menores e executáveis.
+
+Ferramentas disponíveis:
+${toolsDescription}
+
+Histórico da conversa:
+${history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
+
+Tarefa principal: ${task}
+
+Instruções:
+1. Decomponha a tarefa principal em subtasks menores e específicas
+2. Identifique dependências entre as subtasks (quais precisam ser concluídas antes de outras)
+3. Para cada subtask, especifique se ela requer o uso de uma ferramenta específica
+4. Retorne um plano estruturado em formato JSON
+
+Formato de resposta esperado:
+{
+  "subtasks": [
+    {
+      "id": "string",
+      "description": "string",
+      "dependencies": ["string"] // IDs das subtasks que devem ser concluídas primeiro
+    }
+  ]
+}
+
+Responda apenas com o JSON do plano, sem explicações adicionais.`;
+  }
+  
+  // Método para parsear resposta de planejamento
+  private parsePlanningResponse(response: string): { subtasks: any[] } {
+    try {
+      // Tentar extrair JSON da resposta
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return { subtasks: parsed.subtasks || [] };
+      }
+    } catch (e) {
+      // Se falhar, criar subtasks simples baseadas nas linhas
+      const lines = response.split('\n').filter(line => line.trim() !== '');
+      const subtasks: any[] = lines.map((line, index) => ({
+        id: `step_${index + 1}`,
+        description: line.trim(),
+        status: 'pending',
+        dependencies: []
+      }));
+      return { subtasks };
+    }
+    
+    // Default fallback
+    return { subtasks: [] };
+  }
+  
+  // Método para gerar prompt de síntese
+  private generateSynthesisPrompt(
+    originalTask: string,
+    planningTask: any,
+    history: ChatMessage[]
+  ): string {
+    const completedSubtasks = planningTask.subtasks.filter((st: any) => st.status === 'completed');
+    const failedSubtasks = planningTask.subtasks.filter((st: any) => st.status === 'failed');
+    
+    return `Com base no plano executado, forneça uma resposta final para a tarefa original do usuário.
+
+Tarefa original: ${originalTask}
+
+Subtasks concluídas:
+${completedSubtasks.map((st: any) => `- ${st.description}: ${JSON.stringify(st.result)}`).join('\n')}
+
+Subtasks falhas:
+${failedSubtasks.map((st: any) => `- ${st.description}: ${st.result?.error || 'Falha desconhecida'}`).join('\n')}
+
+Histórico da conversa:
+${history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
+
+Instruções:
+- Forneça uma resposta completa e útil para a tarefa original
+- Considere os resultados de todas as subtasks concluídas
+- Se houver subtasks falhas que impedem uma resposta completa, mencione isso
+- Seja conciso mas abrangente`;
   }
 
   // Método para resetar o histórico

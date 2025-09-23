@@ -113,6 +113,19 @@ npm run dev
 - `docs/EXECUTION_FLOW.md` - Fluxo de execução
 - `docs/PROVIDER_CONFIGURATION.md` - Configuração de providers
 
+## Modos de Operação
+
+O agente suporta diferentes modos de operação para diferentes tipos de tarefas:
+
+### 1. Modo Chat (Padrão)
+Modo de conversa simples para interações diretas.
+
+### 2. Modo ReAct (Reasoning + Action)
+Framework para tarefas que requerem raciocínio e ação, usando tools disponíveis.
+
+### 3. Modo Planning
+Modo de planejamento hierárquico para tarefas complexas que requerem decomposição em subtasks.
+
 ## Próximos Passos
 
 1. Implementar suporte a tools/funções
