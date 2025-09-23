@@ -1,6 +1,6 @@
 {
   "name": "@ericnunes/frame_agent",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "SDK para criação de agentes de IA com suporte a múltiplos providers (OpenAI, Anthropic, etc.) usando BAML",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
