@@ -1,7 +1,7 @@
 // src/example-tools.ts
 // Exemplos de tools para testar o sistema
 
-import { Tool } from './tools';
+import { Tool } from '../src/tools';
 
 // Calculadora simples
 const calculatorTool: Tool = {
