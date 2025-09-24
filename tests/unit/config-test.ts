@@ -1,7 +1,7 @@
 // tests/config-test.ts
 // Teste para configuração dinâmica do agente
 
-import { ChatAgent } from '../src/chat-agent-core';
+import { ChatAgent } from '../../src/core/chat-agent-core';
 
 async function testConfig() {
   console.log('=== TESTE DE CONFIGURAÇÃO DINÂMICA ===');

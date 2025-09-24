@@ -1,22 +1,16 @@
 // src/example-tools.ts
 // Exemplos de tools para testar o sistema
 
-import { Tool } from '../src/tools';
+import { Tool } from '../src/adapters/provider-adapter';
+import * as v from 'valibot';
 
 // Calculadora simples
 const calculatorTool: Tool = {
   name: "calculate",
   description: "Realiza operações matemáticas básicas",
-  parameters: {
-    type: "object",
-    properties: {
-      expression: {
-        type: "string",
-        description: "Expressão matemática para calcular (ex: '2 + 2 * 3')"
-      }
-    },
-    required: ["expression"]
-  },
+  parameters: v.object({
+    expression: v.string()
+  }),
   execute: async (args: { expression: string }) => {
     try {
       // Em produção, usar um parser seguro em vez de eval
@@ -32,15 +26,9 @@ const calculatorTool: Tool = {
 const dateTimeTool: Tool = {
   name: "get_current_datetime",
   description: "Obtém a data e hora atual",
-  parameters: {
-    type: "object",
-    properties: {
-      timezone: {
-        type: "string",
-        description: "Fuso horário (ex: 'America/Sao_Paulo')"
-      }
-    }
-  },
+  parameters: v.object({
+    timezone: v.optional(v.string())
+  }),
   execute: async (args: { timezone?: string }) => {
     const now = new Date();
     return {
@@ -56,16 +44,9 @@ const dateTimeTool: Tool = {
 const weatherTool: Tool = {
   name: "get_weather",
   description: "Obtém informações sobre o clima para uma localização",
-  parameters: {
-    type: "object",
-    properties: {
-      location: {
-        type: "string",
-        description: "Nome da cidade ou localização"
-      }
-    },
-    required: ["location"]
-  },
+  parameters: v.object({
+    location: v.string()
+  }),
   execute: async (args: { location: string }) => {
     // Simulação - em produção, integrar com API real
     const conditions = ["Ensolarado", "Nublado", "Chuvoso", "Parcialmente nublado"];

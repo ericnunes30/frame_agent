@@ -1,7 +1,8 @@
 // src/tools.ts
 // Interfaces e tipos para o sistema de tools
+import * as v from 'valibot';
 
-// Interface para parâmetros de tools
+// Interface para parâmetros de tools usando Valibot
 interface ToolParameter {
   type: 'string' | 'number' | 'boolean' | 'array' | 'object';
   description: string;
@@ -20,7 +21,7 @@ interface ToolParameters {
 interface Tool {
   name: string;
   description: string;
-  parameters?: ToolParameters;
+  parameters?: v.GenericSchema | ToolParameters;
   execute: (args: any) => Promise<any>;
 }
 
@@ -53,6 +54,26 @@ class ToolRegistry {
 
   clear(): void {
     this.tools.clear();
+  }
+
+  // Método para validar parâmetros usando Valibot
+  validateParameters(toolName: string, args: any): any {
+    const tool = this.get(toolName);
+    if (!tool) {
+      throw new Error(`Tool '${toolName}' não encontrada`);
+    }
+
+    // Verificar se parameters é um schema do Valibot
+    if (tool.parameters && typeof tool.parameters === 'object' && 'type' in tool.parameters) {
+      try {
+        // @ts-ignore - Ignorar erro de tipagem temporariamente
+        return v.parse(tool.parameters, args);
+      } catch (error: any) {
+        throw new Error(`Validação falhou para tool '${toolName}': ${error.message}`);
+      }
+    }
+
+    return args;
   }
 }
 

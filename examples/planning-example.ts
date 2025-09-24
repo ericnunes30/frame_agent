@@ -1,7 +1,7 @@
 // examples/planning-example.ts
 // Exemplo do modo Planning para tarefas complexas
 
-import { ChatAgent } from '../src/chat-agent-core';
+import { ChatAgent } from '../src/core/chat-agent-core';
 import { calculatorTool, dateTimeTool, weatherTool } from './example-tools';
 import dotenv from 'dotenv';
 

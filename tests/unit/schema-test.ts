@@ -1,10 +1,11 @@
 // tests/schema-test.ts
-// Teste para validação de schemas BAML
+// Teste para validação de schemas com Valibot
 
-import { ChatAgent } from '../src/chat-agent-core';
+import { ChatAgent } from '../../src/core/chat-agent-core';
+import * as v from 'valibot';
 
 async function testSchema() {
-  console.log('=== TESTE DE VALIDAÇÃO DE SCHEMAS BAML ===');
+  console.log('=== TESTE DE VALIDAÇÃO DE SCHEMAS COM VALIBOT ===');
   
   const agent = new ChatAgent({
     name: "Assistente",
@@ -12,10 +13,20 @@ async function testSchema() {
     provider: "openai-generic"
   });
   
+  // Definir schema para resposta estruturada
+  const answerSchema = v.object({
+    answer: v.string(),
+    confidence: v.number(),
+    reasoning: v.optional(v.string())
+  });
+  
   // Testar envio de mensagem com resposta estruturada
   console.log('\n--- Envio de mensagem com resposta estruturada ---');
   try {
-    const response = await agent.sendStructuredMessage('Qual é a capital do Brasil?');
+    const response = await agent.sendStructuredMessage(
+      'Qual é a capital do Brasil?', 
+      answerSchema
+    );
     console.log('Resposta estruturada:');
     console.log('- Resposta:', response.answer);
     console.log('- Confiança:', response.confidence);

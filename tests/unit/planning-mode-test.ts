@@ -1,8 +1,8 @@
 // tests/planning-mode-test.ts
 // Teste para o modo Planning do agente
 
-import { ChatAgent } from '../src/chat-agent-core';
-import { calculatorTool, dateTimeTool, weatherTool } from '../examples/example-tools';
+import { ChatAgent } from '../../src/core/chat-agent-core';
+import { calculatorTool, dateTimeTool, weatherTool } from '../../examples/example-tools';
 
 async function testPlanningMode() {
   console.log('=== TESTE DO MODO PLANNING ===');
@@ -19,7 +19,7 @@ async function testPlanningMode() {
   agent.registerTool(dateTimeTool);
   agent.registerTool(weatherTool);
   
-  console.log('Tools registradas:', agent.listTools().map(t => t.name));
+  console.log('Tools registradas:', agent.listTools().map((t: any) => t.name));
   
   // Testar modo Planning com uma tarefa complexa
   try {

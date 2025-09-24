@@ -1,8 +1,8 @@
 // tests/react-mode-test.ts
 // Teste para o modo ReAct do agente
 
-import { ChatAgent } from '../src/chat-agent-core';
-import { calculatorTool, dateTimeTool, weatherTool } from '../examples/example-tools';
+import { ChatAgent } from '../../src/core/chat-agent-core';
+import { calculatorTool, dateTimeTool, weatherTool } from '../../examples/example-tools';
 
 async function testReActMode() {
   console.log('=== TESTE DO MODO REACT ===');
@@ -19,7 +19,7 @@ async function testReActMode() {
   agent.registerTool(dateTimeTool);
   agent.registerTool(weatherTool);
   
-  console.log('Tools registradas:', agent.listTools().map(t => t.name));
+  console.log('Tools registradas:', agent.listTools().map((t: any) => t.name));
   
   // Testar modo ReAct com uma tarefa simples
   try {

@@ -1,8 +1,8 @@
 // tests/tools-test.ts
 // Teste para o sistema de tools
 
-import { ChatAgent } from '../src/chat-agent-core';
-import { calculatorTool, dateTimeTool, weatherTool } from '../examples/example-tools';
+import { ChatAgent } from '../../src/core/chat-agent-core';
+import { calculatorTool, dateTimeTool, weatherTool } from '../../examples/example-tools';
 
 async function testTools() {
   console.log('=== TESTE DO SISTEMA DE TOOLS ===');
@@ -18,7 +18,7 @@ async function testTools() {
   agent.registerTool(dateTimeTool);
   agent.registerTool(weatherTool);
   
-  console.log('Tools registradas:', agent.listTools().map(t => t.name));
+  console.log('Tools registradas:', agent.listTools().map((t: any) => t.name));
   
   // Testar execução de tools
   try {

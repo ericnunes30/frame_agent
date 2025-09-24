@@ -1,7 +1,11 @@
 // src/memory-manager.ts
 // Gerenciador de memória de contexto para o agente
 
-import type { ChatMessage } from '../baml_client/types';
+// Interface para mensagens de chat
+interface ChatMessage {
+  role: string;
+  content: string;
+}
 
 // Interface para estratégias de gerenciamento de memória
 interface ContextMemoryStrategy {

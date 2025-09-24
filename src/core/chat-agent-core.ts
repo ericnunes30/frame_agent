@@ -1,17 +1,15 @@
 // src/chat-agent-core.ts
-import { b } from '../baml_client';
-import type { ChatMessage } from '../baml_client/types';
-import type { StructuredResponse } from '../baml_client/types';
-import { Tool, ToolRegistry } from './tools';
-import { MemoryManager, DynamicWindowMemory } from './memory-manager';
-
-// Tipos de providers suportados
-type ProviderType = 
-  | 'openai-gpt-4o'
-  | 'openai-gpt-4o-mini'
-  | 'openai-generic'
-  | 'anthropic-sonnet'
-  | 'anthropic-haiku';
+// Interface para mensagens de chat
+interface ChatMessage {
+  role: string;
+  content: string;
+}
+import { ProviderAdapter, ProviderType, Tool } from '../adapters/provider-adapter';
+import { OpenAIAdapter } from '../adapters/openai-adapter';
+import { ToolRegistry } from '../tools/tools';
+import { MemoryManager, DynamicWindowMemory } from '../memory/memory-manager';
+import { PromptBuilder } from './prompt-builder';
+import * as v from 'valibot';
 
 // Tipos de modos de agente
 type AgentMode = 'chat' | 'react' | 'planning';
@@ -67,8 +65,9 @@ class ChatAgent {
   private config: AgentConfig;
   private memoryManager: MemoryManager;
   private toolRegistry: ToolRegistry = new ToolRegistry();
+  private providerAdapter: ProviderAdapter;
 
-  constructor(config: AgentConfig) {
+constructor(config: AgentConfig) {
     // Definir OpenAI Generic como provider padrão se nenhum for especificado
     // Definir 'chat' como modo padrão se nenhum for especificado
     this.config = {
@@ -77,6 +76,35 @@ class ChatAgent {
       ...config
     };
     this.memoryManager = new MemoryManager(new DynamicWindowMemory(4096)); // 4096 tokens de limite
+    
+    // Inicializar provider adapter
+    this.providerAdapter = this.createProviderAdapter(this.config.provider || 'openai-generic');
+  }
+  
+  private createProviderAdapter(provider: ProviderType): ProviderAdapter {
+    switch (provider) {
+      case 'openai-gpt-4o':
+        return new OpenAIAdapter('gpt-4o', process.env.OPENAI_API_KEY);
+      case 'openai-gpt-4o-mini':
+        return new OpenAIAdapter('gpt-4o-mini', process.env.OPENAI_API_KEY);
+      case 'openai-generic':
+        return new OpenAIAdapter(
+          process.env.MODEL || 'gpt-4o-mini',
+          process.env.OPENAI_API_KEY,
+          process.env.OPENAI_BASE_URL
+        );
+      // case 'anthropic-sonnet':
+      //   return new AnthropicAdapter('claude-3-5-sonnet-20241022', process.env.ANTHROPIC_API_KEY);
+      // case 'anthropic-haiku':
+      //   return new AnthropicAdapter('claude-3-haiku-20240307', process.env.ANTHROPIC_API_KEY);
+      default:
+        // Default para OpenAI Generic
+        return new OpenAIAdapter(
+          process.env.MODEL || 'gpt-4o-mini',
+          process.env.OPENAI_API_KEY,
+          process.env.OPENAI_BASE_URL
+        );
+    }
   }
 
   // Método para enviar uma mensagem e obter uma resposta
@@ -98,48 +126,87 @@ class ChatAgent {
     }
   }
 
-  // Método para enviar uma mensagem e obter uma resposta estruturada
-  async sendStructuredMessage(message: string): Promise<StructuredResponse> {
+// Método para enviar uma mensagem e obter uma resposta estruturada
+  async sendStructuredMessage(message: string, schema: any): Promise<any> {
     try {
       // Adicionar a mensagem do usuário ao histórico
       this.memoryManager.addMessage({ role: 'user', content: message });
 
-      // Chamar a função BAML para resposta estruturada
-      const response: StructuredResponse = await b.GetStructuredResponse(message);
+      // Chamar o provider para resposta estruturada
+      const response = await this.providerAdapter.sendStructuredMessage({
+        message,
+        schema,
+        temperature: this.config.temperature,
+        maxTokens: this.config.maxTokens
+      });
+
+      // Validar resposta com Valibot se schema for fornecido
+      let validatedResponse = response;
+      if (schema) {
+        try {
+          // Se a resposta for uma string, tentar parsear como JSON primeiro
+          let parsedResponse = response;
+          if (typeof response === 'string') {
+            try {
+              parsedResponse = JSON.parse(response);
+            } catch (parseError) {
+              // Se não conseguir parsear, usar a resposta como está
+              parsedResponse = response;
+            }
+          }
+          
+          validatedResponse = v.parse(schema, parsedResponse);
+        } catch (error: any) {
+          throw new Error(`Validação da resposta estruturada falhou: ${error.message}`);
+        }
+      }
 
       // Adicionar a resposta do assistente ao histórico
       this.memoryManager.addMessage({ 
         role: 'assistant', 
-        content: `${response.answer} (Confiança: ${response.confidence})` 
+        content: JSON.stringify(validatedResponse)
       });
 
-      return response;
+      return validatedResponse;
     } catch (error) {
       console.error('Erro ao enviar mensagem estruturada:', error);
       throw error;
     }
   }
 
-  // Método privado para chamar a função BAML apropriada
-  private async callBamlFunction(message: string, dynamicConfig?: DynamicConfig): Promise<string> {
-    switch (this.config.provider) {
-      case 'openai-gpt-4o':
-        return await b.ChatWithGPT4o(message);
-      case 'openai-gpt-4o-mini':
-        return await b.ChatWithGPT4oMini(message);
-      case 'openai-generic':
-        return await b.ChatWithOpenAIGeneric(message);
-      case 'anthropic-sonnet':
-        return await b.ChatWithClaudeSonnet(message);
-      case 'anthropic-haiku':
-        return await b.ChatWithClaudeHaiku(message);
-      default:
-        // Default para OpenAI Generic
-        return await b.ChatWithOpenAIGeneric(message);
-    }
+// Método privado para chamar o provider apropriado
+  private async callProviderFunction(message: string, dynamicConfig?: DynamicConfig): Promise<string> {
+    // Obter histórico de mensagens
+    const history = this.memoryManager.getMessages();
+    
+    // Adicionar a nova mensagem do usuário
+    const messages = [...history, { role: 'user', content: message }];
+    
+    // Obter tools registradas
+    const availableTools = this.toolRegistry.list();
+    
+    // Configurar parâmetros
+    const params: any = {
+      messages,
+      tools: availableTools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters
+      })),
+      temperature: dynamicConfig?.temperature ?? this.config.temperature,
+      maxTokens: dynamicConfig?.maxTokens ?? this.config.maxTokens,
+      topP: dynamicConfig?.topP ?? this.config.topP,
+      presencePenalty: dynamicConfig?.presencePenalty ?? this.config.presencePenalty,
+      frequencyPenalty: dynamicConfig?.frequencyPenalty ?? this.config.frequencyPenalty
+    };
+    
+    // Chamar o provider adapter
+    const response = await this.providerAdapter.sendMessage(params);
+    
+    return response.content;
   }
 
-  // Método privado para chamar a função apropriada com base no modo do agente
+// Método privado para chamar a função apropriada com base no modo do agente
   private async callAgentModeFunction(message: string, dynamicConfig?: DynamicConfig): Promise<string> {
     switch (this.config.mode) {
       case 'react':
@@ -149,7 +216,7 @@ class ChatAgent {
       case 'chat':
       default:
         // Default para modo chat
-        return await this.callBamlFunction(message, dynamicConfig);
+        return await this.callProviderFunction(message, dynamicConfig);
     }
   }
 
@@ -184,8 +251,8 @@ class ChatAgent {
           history
         );
         
-        // Chamar LLM para gerar próximo passo
-        const llmResponse = await this.callBamlFunction(reactPrompt, dynamicConfig);
+// Chamar LLM para gerar próximo passo
+        const llmResponse = await this.callProviderFunction(reactPrompt, dynamicConfig);
         
         // Parse da resposta para extrair Thought/Action
         const parsedResponse = this.parseReActResponse(llmResponse);
@@ -242,7 +309,7 @@ class ChatAgent {
     }
   }
   
-  // Método para gerar descrição das tools para o prompt
+// Método para gerar descrição das tools para o prompt
   private generateToolsDescription(tools: Tool[]): string {
     if (tools.length === 0) {
       return "Nenhuma ferramenta disponível.";
@@ -250,47 +317,35 @@ class ChatAgent {
     
     return tools.map(tool => 
       `${tool.name}: ${tool.description}${tool.parameters ? 
-        ` Parâmetros: ${JSON.stringify(tool.parameters.properties)}` : ''}`
+        ` Parâmetros: ${this.getToolParametersDescription(tool.parameters)}` : ''}`
     ).join('\n');
   }
   
-  // Método para gerar prompt ReAct
+  // Método para obter descrição dos parâmetros da tool
+  private getToolParametersDescription(parameters: any): string {
+    // Se for um schema do Valibot, retornar uma descrição genérica
+    if (parameters && typeof parameters === 'object' && 'type' in parameters) {
+      return "Schema validado com Valibot";
+    }
+    
+    // Se for ToolParameters, extrair propriedades
+    if (parameters && parameters.properties) {
+      return JSON.stringify(parameters.properties);
+    }
+    
+    return "Parâmetros desconhecidos";
+  }
+  
+// Método para gerar prompt ReAct
   private generateReActPrompt(
     task: string, 
     toolsDescription: string, 
     steps: ReActStep[],
     history: ChatMessage[]
   ): string {
-    // Construir histórico de passos ReAct
-    const stepsHistory = steps.map(step => 
-      `Thought ${step.stepNumber}: ${step.thought}\n` +
-      (step.action ? 
-        `Action ${step.stepNumber}: ${step.action.name}[${JSON.stringify(step.action.input)}]\n` : '') +
-      (step.observation ? 
-        `Observation ${step.stepNumber}: ${JSON.stringify(step.observation)}\n` : '')
-    ).join('\n');
-    
-    return `Use o framework ReAct (Reasoning + Action) para resolver a tarefa a seguir. Pense passo a passo, e quando precisar reunir informações ou realizar cálculos, use as ferramentas disponíveis.
-
-Ferramentas disponíveis:
-${toolsDescription}
-
-Histórico da conversa:
-${history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
-
-Tarefa: ${task}
-
-Use o seguinte formato:
-Thought: Seu raciocínio sobre a tarefa e o próximo passo
-Action: A ferramenta a ser usada (deve ser uma das: ${this.toolRegistry.list().map(t => t.name).join(', ')})
-Action Input: A entrada para a ferramenta (formato JSON)
-Observation: O resultado da execução da ferramenta
-... (repita Thought/Action/Action Input/Observation conforme necessário)
-Thought: Agora sei a resposta final
-Final Answer: A resposta completa para a tarefa original
-
-${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
-`;
+    // Usar PromptBuilder para gerar o prompt
+    const promptBuilder = new PromptBuilder();
+    return promptBuilder.buildReActPrompt(task, toolsDescription, steps, history);
   }
   
   // Método para parsear resposta ReAct
@@ -381,9 +436,9 @@ ${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
       // Obter histórico de mensagens
       const history = this.memoryManager.getMessages();
       
-      // Etapa 1: Planejamento Hierárquico - Gerar plano de execução com modelos de thinking
+// Etapa 1: Planejamento Hierárquico - Gerar plano de execução com modelos de thinking
       const planningPrompt = this.generatePlanningPrompt(message, toolsDescription, history);
-      const planningResponse = await this.callBamlFunction(planningPrompt, dynamicConfig);
+      const planningResponse = await this.callProviderFunction(planningPrompt, dynamicConfig);
       
       // Parse do plano gerado
       const parsedPlan = this.parsePlanningResponse(planningResponse);
@@ -441,9 +496,9 @@ ${stepsHistory ? 'Passos anteriores:\n' + stepsHistory : 'Comece!'}
       planningTask.status = allCompleted ? 'completed' : 'failed';
       planningTask.completedAt = new Date();
       
-      // Etapa 3: Síntese Adaptativa - Gerar resposta final com base nos resultados e feedback
+// Etapa 3: Síntese Adaptativa - Gerar resposta final com base nos resultados e feedback
       const synthesisPrompt = this.generateSynthesisPrompt(message, planningTask, history);
-      const finalResponse = await this.callBamlFunction(synthesisPrompt, dynamicConfig);
+      const finalResponse = await this.callProviderFunction(synthesisPrompt, dynamicConfig);
       
       // Armazenar tarefa na memória
       this.memoryManager.setVariable(`planning_task_${taskId}`, planningTask);
@@ -612,22 +667,20 @@ Instruções:
     return this.toolRegistry.list();
   }
 
-  async executeTool(toolName: string, args: any): Promise<any> {
+async executeTool(toolName: string, args: any): Promise<any> {
     const tool = this.toolRegistry.get(toolName);
     if (!tool) {
       throw new Error(`Tool '${toolName}' não encontrada`);
     }
 
     try {
-      // Validar parâmetros se disponíveis
-      if (tool.parameters) {
-        this.validateParameters(tool.parameters, args);
-      }
+      // Validar parâmetros usando Valibot
+      const validatedArgs = this.toolRegistry.validateParameters(toolName, args);
 
       // Executar tool com timeout
       const timeout = 30000; // 30 segundos
       const result = await Promise.race([
-        tool.execute(args),
+        tool.execute(validatedArgs),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Timeout na execução da tool')), timeout)
         )
@@ -637,59 +690,6 @@ Instruções:
     } catch (error: any) {
       throw new Error(`Erro ao executar tool '${toolName}': ${error.message}`);
     }
-  }
-
-  private validateParameters(schema: any, args: any): void {
-    // Implementação de validação de parâmetros
-    // Pode usar Zod, Joi, ou validação customizada
-    // Por enquanto, vamos deixar como placeholder
-    console.log('Validando parâmetros:', schema, args);
-  }
-}
-
-// Função para testar o agente de chat
-async function testChatAgent() {
-  console.log('Testando agente de chat com escolha dinâmica de provider...');
-  
-  // Testar com diferentes providers
-  const providers: ProviderType[] = [
-    'openai-generic',  // Provider padrão
-    'openai-gpt-4o-mini',
-    'anthropic-haiku'
-  ];
-  
-  for (const provider of providers) {
-    console.log(`\n--- Testando com provider: ${provider} ---`);
-    
-    const agent = new ChatAgent({
-      name: "Assistente",
-      instructions: "Você é um assistente útil",
-      provider: provider
-    });
-    
-    try {
-      const response = await agent.sendMessage('Olá, qual é o seu nome?');
-      console.log('Usuário: Olá, qual é o seu nome?');
-      console.log('Assistente:', response);
-    } catch (error) {
-      console.error('Erro no teste:', error);
-    }
-  }
-  
-  // Testar com provider padrão (sem especificar provider)
-  console.log('\n--- Testando com provider padrão (sem especificar) ---');
-  const agentPadrao = new ChatAgent({
-    name: "Assistente",
-    instructions: "Você é um assistente útil"
-    // Sem especificar provider - deve usar 'openai-generic' como padrão
-  });
-  
-  try {
-    const response = await agentPadrao.sendMessage('Olá, qual é o seu nome?');
-    console.log('Usuário: Olá, qual é o seu nome?');
-    console.log('Assistente:', response);
-  } catch (error) {
-    console.error('Erro no teste:', error);
   }
 }
 

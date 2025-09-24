@@ -1,7 +1,7 @@
 // examples/react-example.ts
 // Exemplo de uso do modo ReAct
 
-import { ChatAgent } from '../src/chat-agent-core';
+import { ChatAgent } from '../src/core/chat-agent-core';
 import { calculatorTool, dateTimeTool } from './example-tools';
 
 async function reactExample() {

@@ -78,16 +78,17 @@ npm install @ericnunes/frame_agent
 
 ### Variáveis de Ambiente (.env)
 ```env
-# OpenAI
-OPENAI_API_KEY=sua_chave_api_openai
+# Chave de API para OpenAI (obrigatória para providers OpenAI)
+OPENAI_API_KEY=sua_chave_api_aqui
 
-# OpenAI Compatible
-OPENAI_API_KEY=sua_chave_api
-OPENAI_BASE_URL=URL_da_sua_API_compatível
-MODEL=nome_do_modelo
+# URL base para APIs compatíveis com OpenAI (ex: LocalAI, Ollama, etc.)
+OPENAI_BASE_URL=http://localhost:8080/v1
 
-# Anthropic
-ANTHROPIC_API_KEY=sua_chave_api_anthropic
+# Modelo a ser usado para os agentes
+MODEL=gpt-4o-mini
+
+# Chave de API para Anthropic (obrigatória se usar provider anthropic)
+ANTHROPIC_API_KEY=sua_chave_api_anthropic_aqui
 ```
 
 ## API do ChatAgent
@@ -307,9 +308,6 @@ agent.setConfig({
 # Instalar dependências
 npm install
 
-# Gerar cliente BAML
-npx baml generate
-
 # Compilar TypeScript (build)
 npm run build
 
@@ -331,10 +329,6 @@ npm run example:modes
 
 ### Estrutura do Projeto
 ```
-├── baml_src/              # Arquivos BAML (definições de funções e clients)
-│   ├── clients.baml       # Configuração de clients/providers
-│   └── simple-chat.baml   # Funções BAML
-├── baml_client/           # Cliente TypeScript gerado pelo BAML (NÃO EDITAR)
 ├── src/                   # Código TypeScript do SDK
 │   ├── index.ts           # Ponto de entrada principal
 │   ├── chat-agent-core.ts # Implementação principal do agente
@@ -349,13 +343,10 @@ npm run example:modes
 ```
 
 ### Fluxo de Trabalho
-1. **Definir funções BAML** em `baml_src/*.baml`
-2. **Gerar cliente** com `npx baml generate`
-3. **Implementar lógica** em `src/*.ts`
-4. **Testar** com `npx ts-node tests/*.ts`
+1. **Implementar lógica** em `src/*.ts`
+2. **Testar** com `npx ts-node tests/*.ts`
 
 ### Não Editar
-- `baml_client/` - Arquivos gerados automaticamente
 - `dist/` - Arquivos compilados
 
 ## Publicação no NPM
