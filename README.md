@@ -113,6 +113,30 @@ interface AgentConfig {
 }
 ```
 
+### Validação com Valibot
+O SDK agora utiliza Valibot para validação de schemas em respostas estruturadas e parâmetros de tools:
+
+```typescript
+import * as v from 'valibot';
+
+// Schema para validação de resposta estruturada
+const UserSchema = v.object({
+  name: v.string(),
+  age: v.pipe(
+    v.number(),
+    v.minValue(0),
+    v.maxValue(120)
+  ),
+  email: v.optional(v.string())
+});
+
+// Usar com sendStructuredMessage
+const response = await agent.sendStructuredMessage(
+  "Crie um usuário com nome 'Maria', idade 28 e cidade 'São Paulo'",
+  UserSchema
+);
+```
+
 ### Métodos Principais
 
 #### sendMessage(message: string, dynamicConfig?: DynamicConfig): Promise<string>
@@ -217,9 +241,30 @@ O SDK suporta um sistema de tools extensível para os modos ReAct e Planning.
 interface Tool {
   name: string;
   description: string;
-  parameters?: ToolParameters;
+  parameters?: v.GenericSchema | ToolParameters;
   execute: (args: any) => Promise<any>;
 }
+```
+
+### Exemplo de Tool com Valibot
+```typescript
+import * as v from 'valibot';
+
+const calculatorTool: Tool = {
+  name: "calculate",
+  description: "Realiza operações matemáticas básicas",
+  parameters: v.object({
+    expression: v.string()
+  }),
+  execute: async (args: { expression: string }) => {
+    try {
+      const result = eval(args.expression);
+      return { result: Number(result.toFixed(2)) };
+    } catch (error) {
+      throw new Error(`Não foi possível calcular: ${args.expression}`);
+    }
+  }
+};
 ```
 
 ### Exemplo de Tool
@@ -317,8 +362,10 @@ npm run example
 # Desenvolvimento contínuo (watch mode)
 npm run dev
 
-# Executar testes
-npm test
+# Executar testes unitários
+npm run test
+# ou
+npx ts-node tests/run-unit-tests.ts
 
 # Executar exemplos específicos
 npm run example:react-basic
@@ -329,22 +376,33 @@ npm run example:modes
 
 ### Estrutura do Projeto
 ```
-├── src/                   # Código TypeScript do SDK
-│   ├── index.ts           # Ponto de entrada principal
-│   ├── chat-agent-core.ts # Implementação principal do agente
-│   ├── tools.ts           # Sistema de tools
-│   └── memory-manager.ts  # Gerenciador de memória
-├── dist/                  # Arquivos compilados (NÃO EDITAR)
-├── docs/                  # Documentação
-├── tests/                 # Testes
-├── examples/              # Exemplos de uso
-├── .env                   # Variáveis de ambiente
-└── package.json           # Dependências e scripts
+├── src/                      # Código TypeScript do SDK
+│   ├── index.ts              # Ponto de entrada principal
+│   ├── core/                 # Componentes principais
+│   │   ├── chat-agent-core.ts # Implementação principal do agente
+│   │   ├── prompt-builder.ts  # Construtor de prompts
+│   │   └── structured-response.ts # Respostas estruturadas
+│   ├── adapters/             # Adaptadores de providers
+│   │   ├── provider-adapter.ts # Interface base para providers
+│   │   ├── openai-adapter.ts   # Adaptador para OpenAI
+│   │   └── anthropic-adapter.ts # Adaptador para Anthropic
+│   ├── tools/                # Sistema de tools
+│   │   └── tools.ts          # Registro e gerenciamento de tools
+│   ├── memory/               # Gerenciamento de memória
+│   │   └── memory-manager.ts # Gerenciador de memória
+│   └── types/                # Definições de tipos
+│       └── types.d.ts        # Tipos personalizados
+├── dist/                     # Arquivos compilados (NÃO EDITAR)
+├── docs/                     # Documentação
+├── tests/                    # Testes
+├── examples/                 # Exemplos de uso
+├── .env                      # Variáveis de ambiente
+└── package.json              # Dependências e scripts
 ```
 
 ### Fluxo de Trabalho
-1. **Implementar lógica** em `src/*.ts`
-2. **Testar** com `npx ts-node tests/*.ts`
+1. **Implementar lógica** nos arquivos apropriados em `src/`
+2. **Testar** com `npx ts-node tests/unit/*.ts`
 
 ### Não Editar
 - `dist/` - Arquivos compilados
@@ -353,7 +411,7 @@ npm run example:modes
 
 Para publicar uma nova versão do SDK:
 
-1. Atualizar o número da versão no `package.json`
+1. Atualizar o número da versão com `npm version patch` (ou minor/major conforme necessário)
 2. Executar `npm run build` para compilar o código
 3. Executar `npm publish` para publicar no NPM
 
@@ -365,7 +423,9 @@ O script `prepublishOnly` é configurado para compilar automaticamente antes da 
 
 ### Processo de Publicação
 ```bash
-# 1. Atualizar versão no package.json
+# 1. Atualizar versão (ex: patch)
+npm version patch
+
 # 2. Compilar o código
 npm run build
 
