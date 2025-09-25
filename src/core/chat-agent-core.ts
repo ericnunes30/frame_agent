@@ -77,6 +77,11 @@ constructor(config: AgentConfig) {
     };
     this.memoryManager = new MemoryManager(new DynamicWindowMemory(4096)); // 4096 tokens de limite
     
+    // Adicionar instruções como mensagem do sistema
+    if (this.config.instructions) {
+      this.memoryManager.addMessage({ role: 'system', content: this.config.instructions });
+    }
+    
     // Inicializar provider adapter
     this.providerAdapter = this.createProviderAdapter(this.config.provider || 'openai-generic');
   }
@@ -513,13 +518,18 @@ constructor(config: AgentConfig) {
     }
   }
   
-  // Método para gerar prompt de planejamento com modelos de thinking
+// Método para gerar prompt de planejamento com modelos de thinking
   private generatePlanningPrompt(
     task: string, 
     toolsDescription: string, 
     history: ChatMessage[]
   ): string {
-    return `Você é um assistente avançado com capacidades de thinking (raciocínio profundo). Sua tarefa é decompor a solicitação do usuário em subtasks menores e executáveis, usando um processo de pensamento analítico profundo.
+    // Obter instruções do sistema do histórico, se existirem
+    const systemMessage = history.find(msg => msg.role === 'system');
+    const systemInstructions = systemMessage ? 
+      `System Instructions: ${systemMessage.content}\n\n` : '';
+    
+    return `${systemInstructions}Você é um assistente avançado com capacidades de thinking (raciocínio profundo). Sua tarefa é decompor a solicitação do usuário em subtasks menores e executáveis, usando um processo de pensamento analítico profundo.
 
 Arquitetura Dual-Process:
 - Modo Rápido (System 1): Respostas imediatas para tarefas simples

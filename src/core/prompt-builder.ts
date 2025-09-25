@@ -58,7 +58,12 @@ export class PromptBuilder {
     // Formatar o scratchpad
     const formattedScratchpad = stepsHistory ? 'Previous steps:\n' + stepsHistory : 'Start!';
     
-    return `You are an intelligent agent designed to solve user tasks by thinking step-by-step and using a set of available tools.
+    // Obter instruções do sistema do histórico, se existirem
+    const systemMessage = history.find(msg => msg.role === 'system');
+    const systemInstructions = systemMessage ? 
+      `System Instructions: ${systemMessage.content}\n\n` : '';
+    
+    return `${systemInstructions}You are an intelligent agent designed to solve user tasks by thinking step-by-step and using a set of available tools.
 
 Your operational framework is the ReAct (Reasoning and Acting) loop. You MUST strictly follow this format for every turn:
 
