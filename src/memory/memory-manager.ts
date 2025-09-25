@@ -53,6 +53,7 @@ class DynamicWindowMemory implements ContextMemoryStrategy {
   private messages: ChatMessage[] = [];
   private maxTokens: number;
   private tokenizer: SimpleTokenizer;
+  private fixedMessages: Set<number> = new Set(); // Índices das mensagens que devem ser mantidas fixas
 
   constructor(maxTokens: number = 4096) {
     this.maxTokens = maxTokens;
@@ -64,9 +65,41 @@ class DynamicWindowMemory implements ContextMemoryStrategy {
     this.pruneToFit();
   }
 
+  // Marcar mensagens como fixas (não removíveis)
+  setFixedMessages(indices: number[]): void {
+    this.fixedMessages = new Set(indices);
+  }
+
   private pruneToFit(): void {
-    while (this.getTokenCount() > this.maxTokens && this.messages.length > 1) {
-      this.messages.shift();
+    while (this.getTokenCount() > this.maxTokens && this.messages.length > this.fixedMessages.size) {
+      // Encontrar o primeiro índice que não é fixo
+      let removeIndex = -1;
+      for (let i = 0; i < this.messages.length; i++) {
+        if (!this.fixedMessages.has(i)) {
+          removeIndex = i;
+          break;
+        }
+      }
+      
+      // Se não encontrou índice não fixo, não remove nada
+      if (removeIndex === -1) {
+        break;
+      }
+      
+      // Remover a mensagem não fixa
+      this.messages.splice(removeIndex, 1);
+      
+      // Atualizar os índices das mensagens fixas
+      const newFixedMessages = new Set<number>();
+      for (const index of this.fixedMessages) {
+        if (index > removeIndex) {
+          newFixedMessages.add(index - 1);
+        } else if (index < removeIndex) {
+          newFixedMessages.add(index);
+        }
+        // Se index === removeIndex, não adiciona (mensagem foi removida)
+      }
+      this.fixedMessages = newFixedMessages;
     }
   }
 
@@ -81,6 +114,7 @@ class DynamicWindowMemory implements ContextMemoryStrategy {
 
   clear(): void {
     this.messages = [];
+    this.fixedMessages.clear();
   }
 
   replaceMessages(messages: ChatMessage[]): void {

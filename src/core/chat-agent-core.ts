@@ -75,11 +75,26 @@ constructor(config: AgentConfig) {
       mode: 'chat',
       ...config
     };
-    this.memoryManager = new MemoryManager(new DynamicWindowMemory(4096)); // 4096 tokens de limite
+    const dynamicMemory = new DynamicWindowMemory(4096); // 4096 tokens de limite
+    this.memoryManager = new MemoryManager(dynamicMemory);
     
     // Adicionar instruções como mensagem do sistema
     if (this.config.instructions) {
       this.memoryManager.addMessage({ role: 'system', content: this.config.instructions });
+    }
+    
+    // Marcar mensagens do sistema como fixas
+    const fixedIndices: number[] = [];
+    const currentMessages = this.memoryManager.getMessages();
+    currentMessages.forEach((msg, index) => {
+      if (msg.role === 'system') {
+        fixedIndices.push(index);
+      }
+    });
+    
+    // Se estiver usando DynamicWindowMemory, definir mensagens fixas
+    if (dynamicMemory.setFixedMessages) {
+      dynamicMemory.setFixedMessages(fixedIndices);
     }
     
     // Inicializar provider adapter
@@ -112,11 +127,40 @@ constructor(config: AgentConfig) {
     }
   }
 
-  // Método para enviar uma mensagem e obter uma resposta
+// Método para enviar uma mensagem e obter uma resposta
   async sendMessage(message: string, dynamicConfig?: DynamicConfig): Promise<string> {
     try {
+      // Verificar se é a primeira mensagem do usuário
+      const currentMessages = this.memoryManager.getMessages();
+      const hasUserMessage = currentMessages.some(msg => msg.role === 'user');
+      
       // Adicionar a mensagem do usuário ao histórico
       this.memoryManager.addMessage({ role: 'user', content: message });
+      
+      // Se for a primeira mensagem do usuário, marcar como fixa
+      if (!hasUserMessage) {
+        // Atualizar índices das mensagens fixas
+        const memoryStrategy = (this.memoryManager as any).contextMemory;
+        if (memoryStrategy.setFixedMessages) {
+          const updatedMessages = this.memoryManager.getMessages();
+          const fixedIndices: number[] = [];
+          
+          // Marcar mensagens do sistema como fixas
+          updatedMessages.forEach((msg, index) => {
+            if (msg.role === 'system') {
+              fixedIndices.push(index);
+            }
+          });
+          
+          // Marcar a primeira mensagem do usuário como fixa
+          const firstUserIndex = updatedMessages.findIndex(msg => msg.role === 'user');
+          if (firstUserIndex !== -1) {
+            fixedIndices.push(firstUserIndex);
+          }
+          
+          memoryStrategy.setFixedMessages(fixedIndices);
+        }
+      }
 
       // Chamar a função apropriada com base no modo do agente
       const response: string = await this.callAgentModeFunction(message, dynamicConfig);
