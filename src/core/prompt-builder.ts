@@ -55,26 +55,26 @@ export class PromptBuilder {
         `Observation ${step.stepNumber}: ${JSON.stringify(step.observation)}\n` : '')
     ).join('\n');
     
-    return `Use the ReAct framework (Reasoning + Action) to solve the following task. Think step by step, and when you need to gather information or perform calculations, use the available tools.
+    // Formatar o scratchpad
+    const formattedScratchpad = stepsHistory ? 'Previous steps:\n' + stepsHistory : 'Start!';
     
-Available tools:
+    return `You are an intelligent agent designed to solve user tasks by thinking step-by-step and using a set of available tools.
+
+Your operational framework is the ReAct (Reasoning and Acting) loop. You MUST strictly follow this format for every turn:
+
+Thought: Reason about the user's request, your progress, and decide on the next immediate action to take. Do not plan multiple steps ahead; focus only on the very next action.
+Action: Output a single JSON object representing the tool you want to use and its input. The JSON should have 'name' for the tool and 'input' for its parameters. If you have gathered enough information to provide a final answer, use the tool named 'final_answer' with the user-facing response as the input.
+
+You have access to the following tools:
 ${toolsDescription}
 
-Conversation history:
-${history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
+Begin the task by thinking about your first step. Do not output any preamble or introductory text. Start directly with "Thought:".
 
-Task: ${task}
+Here is the history of your work on this task so far:
+${formattedScratchpad}
 
-Use the following format:
-Thought: Your reasoning about the task and the next step
-Action: The tool to use (must be one of: ${steps.length > 0 ? steps[0].availableTools?.map((t: any) => t.name).join(', ') : 'no tools available'})
-Action Input: The input to the tool (JSON format)
-Observation: The result of executing the tool
-... (repeat Thought/Action/Action Input/Observation as needed)
-Thought: I now know the final answer
-Final Answer: The complete answer to the original task
+Current Task: "${task}"
 
-${stepsHistory ? 'Previous steps:\n' + stepsHistory : 'Start!'}
-`;
+Your turn. Start with "Thought:".`;
   }
 }

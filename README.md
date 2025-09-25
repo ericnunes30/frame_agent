@@ -403,9 +403,12 @@ npm run example:modes
 ### Fluxo de Trabalho
 1. **Implementar lógica** nos arquivos apropriados em `src/`
 2. **Testar** com `npx ts-node tests/unit/*.ts`
+3. **Testar correção do modo ReAct** com `npx ts-node tests/unit/react-fix-mock-test.ts`
 
 ### Não Editar
 - `dist/` - Arquivos compilados
+- `tests/unit/test-react-fix.ts` - Teste de validação da correção do modo ReAct
+- `tests/unit/react-fix-mock-test.ts` - Teste de validação da correção do modo ReAct com mock
 
 ## Publicação no NPM
 
