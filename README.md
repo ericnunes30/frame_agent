@@ -22,10 +22,10 @@ Um SDK TypeScript completo para criar agentes de IA avançados com múltiplos mo
 
 O SDK suporta três modos principais de operação para diferentes tipos de tarefas:
 
-### ✨ Novidades na versão 1.0.4
-- **Correção do modo ReAct**: Agora o agente segue estritamente o framework ReAct mesmo com instruções específicas do usuário
-- **Melhoria de robustez**: O modo ReAct é mais resistente a instruções conflitantes
-- **Compatibilidade aprimorada**: Scripts ajustados para funcionar corretamente no Windows e Linux
+### ✨ Novidades na versão 1.0.6
+- **Correção do processamento de instruções**: As instruções personalizadas agora são corretamente aplicadas em todos os modos (Chat, ReAct e Planning)
+- **Implementação de mensagens fixas na memória**: O prompt do sistema e a primeira mensagem do usuário são mantidos mesmo durante a poda de memória
+- **Melhoria na robustez do sistema**: Comportamento mais consistente em todos os modos do agente
 
 ### 1. Modo Chat (Padrão)
 Modo de conversa simples para interações diretas. Ideal para perguntas e respostas diretas, conversas casuais e interações básicas.
@@ -41,7 +41,7 @@ const agent = new ChatAgent({
 ### 2. Modo ReAct (Reasoning + Action)
 Framework para tarefas que requerem raciocínio e ação, usando tools disponíveis. O agente pensa passo a passo, decide quais ações tomar e executa as tools necessárias.
 
-**✅ Corrigido na versão 1.0.4**: O agente agora segue estritamente o framework ReAct mesmo quando recebe instruções muito específicas do usuário, eliminando o problema de "alucinação" da resposta final.
+**✅ Corrigido na versão 1.0.6**: O agente agora mantém o prompt do sistema e a primeira mensagem do usuário como fixas na memória, garantindo que instruções importantes não sejam perdidas durante a poda.
 
 ```typescript
 const agent = new ChatAgent({
@@ -415,10 +415,12 @@ npm run example:modes
 2. **Testar** com `npx ts-node tests/unit/*.ts`
 3. **Testar correção do modo ReAct** com `npx ts-node tests/unit/react-fix-mock-test.ts`
 
-### ✨ Novos Testes de Validação (v1.0.4)
+### ✨ Novos Testes de Validação (v1.0.6)
 - `tests/unit/react-fix-mock-test.ts` - Teste abrangente da correção do modo ReAct com mock
 - `tests/unit/test-react-fix.ts` - Teste da correção com provider real
 - `tests/unit/react-fix-validation-test.ts` - Teste adicional de validação
+- `tests/unit/instructions-verification.ts` - Teste de verificação do processamento de instruções
+- `tests/unit/memory-fixed-test.ts` - Teste de verificação de mensagens fixas na memória
 
 ### Não Editar
 - `dist/` - Arquivos compilados
@@ -435,9 +437,10 @@ Para publicar uma nova versão do SDK:
 
 O script `prepublishOnly` é configurado para compilar automaticamente antes da publicação.
 
-### ✨ Melhorias na v1.0.4
-- **Compatibilidade Windows**: Scripts ajustados para funcionar corretamente no Windows e Linux
-- **Build robusto**: Processo de build otimizado com `npx` para evitar problemas de PATH
+### ✨ Melhorias na v1.0.6
+- **Processamento de instruções**: As instruções personalizadas agora são corretamente aplicadas em todos os modos
+- **Mensagens fixas na memória**: O prompt do sistema e a primeira mensagem do usuário são mantidos durante a poda
+- **Consistência aprimorada**: Comportamento mais uniforme em todos os modos do agente
 
 ### Pré-requisitos
 - Conta no NPM com permissões para publicar no escopo `@ericnunes`
