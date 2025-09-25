@@ -2,6 +2,9 @@
 
 Um SDK TypeScript completo para criar agentes de IA avançados com múltiplos modos de operação, incluindo Chat, ReAct e Planning com modelos de thinking.
 
+[![npm version](https://img.shields.io/npm/v/@ericnunes/frame_agent.svg)](https://www.npmjs.com/package/@ericnunes/frame_agent)
+[![npm downloads](https://img.shields.io/npm/dt/@ericnunes/frame_agent.svg)](https://www.npmjs.com/package/@ericnunes/frame_agent)
+
 ## Sumário
 
 - [Modos de Operação](#modos-de-operação)
@@ -19,6 +22,11 @@ Um SDK TypeScript completo para criar agentes de IA avançados com múltiplos mo
 
 O SDK suporta três modos principais de operação para diferentes tipos de tarefas:
 
+### ✨ Novidades na versão 1.0.4
+- **Correção do modo ReAct**: Agora o agente segue estritamente o framework ReAct mesmo com instruções específicas do usuário
+- **Melhoria de robustez**: O modo ReAct é mais resistente a instruções conflitantes
+- **Compatibilidade aprimorada**: Scripts ajustados para funcionar corretamente no Windows e Linux
+
 ### 1. Modo Chat (Padrão)
 Modo de conversa simples para interações diretas. Ideal para perguntas e respostas diretas, conversas casuais e interações básicas.
 
@@ -32,6 +40,8 @@ const agent = new ChatAgent({
 
 ### 2. Modo ReAct (Reasoning + Action)
 Framework para tarefas que requerem raciocínio e ação, usando tools disponíveis. O agente pensa passo a passo, decide quais ações tomar e executa as tools necessárias.
+
+**✅ Corrigido na versão 1.0.4**: O agente agora segue estritamente o framework ReAct mesmo quando recebe instruções muito específicas do usuário, eliminando o problema de "alucinação" da resposta final.
 
 ```typescript
 const agent = new ChatAgent({
@@ -405,6 +415,11 @@ npm run example:modes
 2. **Testar** com `npx ts-node tests/unit/*.ts`
 3. **Testar correção do modo ReAct** com `npx ts-node tests/unit/react-fix-mock-test.ts`
 
+### ✨ Novos Testes de Validação (v1.0.4)
+- `tests/unit/react-fix-mock-test.ts` - Teste abrangente da correção do modo ReAct com mock
+- `tests/unit/test-react-fix.ts` - Teste da correção com provider real
+- `tests/unit/react-fix-validation-test.ts` - Teste adicional de validação
+
 ### Não Editar
 - `dist/` - Arquivos compilados
 - `tests/unit/test-react-fix.ts` - Teste de validação da correção do modo ReAct
@@ -420,6 +435,10 @@ Para publicar uma nova versão do SDK:
 
 O script `prepublishOnly` é configurado para compilar automaticamente antes da publicação.
 
+### ✨ Melhorias na v1.0.4
+- **Compatibilidade Windows**: Scripts ajustados para funcionar corretamente no Windows e Linux
+- **Build robusto**: Processo de build otimizado com `npx` para evitar problemas de PATH
+
 ### Pré-requisitos
 - Conta no NPM com permissões para publicar no escopo `@ericnunes`
 - Código testado e validado
@@ -434,4 +453,10 @@ npm run build
 
 # 3. Publicar no NPM
 npm publish
+```
+
+### ✨ Dica para Windows
+Se estiver no Windows e encontrar problemas com o `tsup`, instale-o globalmente:
+```bash
+npm install -g tsup
 ```
