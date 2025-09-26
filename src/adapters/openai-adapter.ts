@@ -11,7 +11,7 @@ export class OpenAIAdapter implements ProviderAdapter {
     this.model = model;
     // @ts-ignore - Ignorar erro de tipo temporariamente
     this.client = new OpenAI({
-      apiKey: apiKey || process.env.OPENAI_API_KEY || '',
+      apiKey: apiKey || process.env.OPENAI_API_KEY || 'MISSING_API_KEY',
       baseURL: baseURL || process.env.OPENAI_BASE_URL
     });
   }
