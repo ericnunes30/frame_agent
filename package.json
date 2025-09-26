@@ -1,6 +1,6 @@
 {
   "name": "@ericnunes/frame_agent",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "SDK para criação de agentes de IA com suporte a múltiplos providers (OpenAI, Anthropic, etc.)",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -29,7 +29,7 @@
     "openai",
     "anthropic"
   ],
-  "author": "BoundaryML",
+  "author": "Eric Nunes",
   "license": "MIT",
   "repository": {
     "type": "git",

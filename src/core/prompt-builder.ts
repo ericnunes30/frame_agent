@@ -67,11 +67,17 @@ export class PromptBuilder {
 
 Your operational framework is the ReAct (Reasoning and Acting) loop. You MUST strictly follow this format for every turn:
 
-Thought: Reason about the user's request, your progress, and decide on the next immediate action to take. Do not plan multiple steps ahead; focus only on the very next action.
+Thought: Reason about the user's request, your progress, and decide on the next immediate action to take. Do not plan multiple steps ahead; focus only on the very next action. If you notice you are repeating the same action with the same parameters, stop and reconsider your approach.
 Action: Output a single JSON object representing the tool you want to use and its input. The JSON should have 'name' for the tool and 'input' for its parameters. If you have gathered enough information to provide a final answer, use the tool named 'final_answer' with the user-facing response as the input.
+Action Input: A JSON object with the parameters for the action.
 
 You have access to the following tools:
 ${toolsDescription}
+
+Example format:
+Thought: I need to create a React component file.
+Action: file_create
+Action Input: {"filePath": "HelloWorld.js", "content": "import React from 'react';\\n\\nfunction HelloWorld() {\\n  return <div>Hello, world</div>;\\n}\\n\\nexport default HelloWorld;"}
 
 Begin the task by thinking about your first step. Do not output any preamble or introductory text. Start directly with "Thought:".
 

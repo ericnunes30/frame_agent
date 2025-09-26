@@ -290,8 +290,42 @@ constructor(config: AgentConfig) {
       // Obter histórico de mensagens
       const history = this.memoryManager.getMessages();
       
-      // Executar ciclo ReAct (máximo de 10 passos)
-      for (let step = 0; step < 10; step++) {
+// Executar ciclo ReAct (sem limite fixo de passos)
+      let step = 0;
+      const maxSteps = 50; // Limite máximo de segurança
+      while (step < maxSteps) {
+        // Verificar se há loops nas ações recentes
+        if (reactProcess.steps.length >= 3 && this.detectActionLoop(reactProcess.steps)) {
+          // Forçar reavaliação quando loop é detectado
+          console.log('[Loop Detectado] Forçando reavaliação da estratégia...');
+          // Adicionar instrução especial para re-pensar
+          const reThinkPrompt = this.generateReActPrompt(
+            message, 
+            toolsDescription, 
+            reactProcess.steps,
+            history
+          );
+          
+          // Chamar LLM para reavaliar
+          const reThinkResponse = await this.callProviderFunction(reThinkPrompt, dynamicConfig);
+          const reThinkParsed = this.parseReActResponse(reThinkResponse);
+          
+          // Adicionar passo de reavaliação
+          const reThinkStep: ReActStep = {
+            stepNumber: step + 1,
+            thought: `[Reavaliação] ${reThinkParsed.thought}`,
+            action: reThinkParsed.action,
+            timestamp: new Date()
+          };
+          
+          reactProcess.steps.push(reThinkStep);
+          
+          // Se ainda houver ação após reavaliação, continuar normalmente
+          if (reThinkParsed.action) {
+            // Log do pensamento de reavaliação
+            console.log(`[Reavaliação] ${reThinkParsed.thought}`);
+          }
+        }
         // Criar prompt ReAct com contexto atual
         const reactPrompt = this.generateReActPrompt(
           message, 
@@ -337,14 +371,17 @@ constructor(config: AgentConfig) {
           break;
         }
         
-        // Verificar se atingiu o limite de passos
-        if (step === 9) {
-          reactProcess.status = 'failed';
-          reactProcess.endTime = new Date();
-          reactProcess.finalAnswer = "Não foi possível encontrar uma resposta após 10 passos.";
-        }
+// Incrementar contador de passos
+        step++;
+}
+
+      // Se atingiu o limite máximo de passos
+      if (step >= maxSteps) {
+        reactProcess.status = 'failed';
+        reactProcess.endTime = new Date();
+        reactProcess.finalAnswer = `Não foi possível encontrar uma resposta após ${maxSteps} passos.`;
       }
-      
+
       // Armazenar processo na memória
       this.memoryManager.setVariable(`react_process_${processId}`, reactProcess);
       
@@ -358,7 +395,39 @@ constructor(config: AgentConfig) {
     }
   }
   
-// Método para gerar descrição das tools para o prompt
+// Método para detectar loops em ações recentes
+  private detectActionLoop(steps: ReActStep[]): boolean {
+    // Verificar se temos pelo menos 3 passos
+    if (steps.length < 3) {
+      return false;
+    }
+    
+    // Verificar os últimos 3 passos
+    const recentSteps = steps.slice(-3);
+    
+    // Verificar se todos têm a mesma action
+    if (recentSteps[0].action && recentSteps[1].action && recentSteps[2].action) {
+      const action1 = recentSteps[0].action;
+      const action2 = recentSteps[1].action;
+      const action3 = recentSteps[2].action;
+      
+      // Verificar se é a mesma action com os mesmos parâmetros
+      if (action1.name === action2.name && action2.name === action3.name) {
+        // Comparar parâmetros (simplificado)
+        const input1 = JSON.stringify(action1.input);
+        const input2 = JSON.stringify(action2.input);
+        const input3 = JSON.stringify(action3.input);
+        
+        if (input1 === input2 && input2 === input3) {
+          return true; // Loop detectado
+        }
+      }
+    }
+    
+    return false; // Nenhum loop detectado
+  }
+
+  // Método para gerar descrição das tools para o prompt
   private generateToolsDescription(tools: Tool[]): string {
     if (tools.length === 0) {
       return "Nenhuma ferramenta disponível.";
