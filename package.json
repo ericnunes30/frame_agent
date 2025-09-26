@@ -1,5 +1,5 @@
 {
-  "name": "@ericnunes/frame_agent",
+  "name": "frame_agent",
   "version": "1.0.8",
   "description": "SDK para criação de agentes de IA com suporte a múltiplos providers (OpenAI, Anthropic, etc.)",
   "main": "dist/index.js",
