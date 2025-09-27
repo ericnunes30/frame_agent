@@ -292,10 +292,20 @@ constructor(config: AgentConfig) {
       
 // Executar ciclo ReAct (sem limite fixo de passos)
       let step = 0;
-      const maxSteps = 50; // Limite máximo de segurança
-      while (step < maxSteps) {
+      // Removido limite máximo de passos para permitir execução ilimitada
+      while (true) {
         // Verificar se há loops nas ações recentes
-        if (reactProcess.steps.length >= 3 && this.detectActionLoop(reactProcess.steps)) {
+        const loopDetection = this.detectActionLoop(reactProcess.steps);
+        if (reactProcess.steps.length >= 3 && loopDetection.detected) {
+          // Adicionar mensagem do sistema informando sobre o loop
+          const loopMessage = {
+            role: 'system',
+            content: `ATENÇÃO: Você está repetindo a mesma ação (${loopDetection.actionName}) três vezes consecutivas. Isso indica que você entrou em um loop. Por favor, reavalie sua estratégia e tente uma abordagem diferente.`
+          };
+          
+          // Adicionar a mensagem do sistema ao histórico temporário
+          const historyWithLoopWarning = [...history, loopMessage];
+          
           // Forçar reavaliação quando loop é detectado
           console.log('[Loop Detectado] Forçando reavaliação da estratégia...');
           // Adicionar instrução especial para re-pensar
@@ -303,7 +313,7 @@ constructor(config: AgentConfig) {
             message, 
             toolsDescription, 
             reactProcess.steps,
-            history
+            historyWithLoopWarning
           );
           
           // Chamar LLM para reavaliar
@@ -326,12 +336,21 @@ constructor(config: AgentConfig) {
             console.log(`[Reavaliação] ${reThinkParsed.thought}`);
           }
         }
+        
         // Criar prompt ReAct com contexto atual
+        // Se houve detecção de loop, usar o histórico com a mensagem de aviso
+        const currentHistory = (reactProcess.steps.length >= 3 && loopDetection.detected) 
+          ? [...history, {
+              role: 'system',
+              content: `ATENÇÃO: Você está repetindo a mesma ação (${loopDetection.actionName}) três vezes consecutivas. Isso indica que você entrou em um loop. Por favor, reavalie sua estratégia e tente uma abordagem diferente.`
+            }]
+          : history;
+          
         const reactPrompt = this.generateReActPrompt(
           message, 
           toolsDescription, 
           reactProcess.steps,
-          history
+          currentHistory
         );
         
 // Chamar LLM para gerar próximo passo
@@ -373,13 +392,6 @@ constructor(config: AgentConfig) {
         
 // Incrementar contador de passos
         step++;
-}
-
-      // Se atingiu o limite máximo de passos
-      if (step >= maxSteps) {
-        reactProcess.status = 'failed';
-        reactProcess.endTime = new Date();
-        reactProcess.finalAnswer = `Não foi possível encontrar uma resposta após ${maxSteps} passos.`;
       }
 
       // Armazenar processo na memória
@@ -396,10 +408,10 @@ constructor(config: AgentConfig) {
   }
   
 // Método para detectar loops em ações recentes
-  private detectActionLoop(steps: ReActStep[]): boolean {
+  private detectActionLoop(steps: ReActStep[]): { detected: boolean; actionName?: string } {
     // Verificar se temos pelo menos 3 passos
     if (steps.length < 3) {
-      return false;
+      return { detected: false };
     }
     
     // Verificar os últimos 3 passos
@@ -419,12 +431,12 @@ constructor(config: AgentConfig) {
         const input3 = JSON.stringify(action3.input);
         
         if (input1 === input2 && input2 === input3) {
-          return true; // Loop detectado
+          return { detected: true, actionName: action1.name }; // Loop detectado
         }
       }
     }
     
-    return false; // Nenhum loop detectado
+    return { detected: false }; // Nenhum loop detectado
   }
 
   // Método para gerar descrição das tools para o prompt
@@ -800,14 +812,8 @@ async executeTool(toolName: string, args: any): Promise<any> {
       // Validar parâmetros usando Valibot
       const validatedArgs = this.toolRegistry.validateParameters(toolName, args);
 
-      // Executar tool com timeout
-      const timeout = 30000; // 30 segundos
-      const result = await Promise.race([
-        tool.execute(validatedArgs),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout na execução da tool')), timeout)
-        )
-      ]);
+      // Executar tool sem timeout
+      const result = await tool.execute(validatedArgs);
 
       return result;
     } catch (error: any) {
