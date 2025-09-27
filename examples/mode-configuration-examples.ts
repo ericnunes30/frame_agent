@@ -1,7 +1,7 @@
 // examples/mode-configuration-examples.ts
 // Exemplos de como configurar e usar os diferentes modos do agente
 
-import { ChatAgent } from '../src/chat-agent-core';
+import { ChatAgent } from '../src/core/chat-agent-core';
 import { calculatorTool, dateTimeTool, weatherTool } from './example-tools';
 import dotenv from 'dotenv';
 

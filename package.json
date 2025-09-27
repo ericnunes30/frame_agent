@@ -1,7 +1,7 @@
 {
-  "name": "@ericnunes/frame_agent",
-  "version": "1.0.0",
-  "description": "SDK para criação de agentes de IA com suporte a múltiplos providers (OpenAI, Anthropic, etc.) usando BAML",
+  "name": "frame_agent",
+  "version": "1.0.9",
+  "description": "SDK para criação de agentes de IA com suporte a múltiplos providers (OpenAI, Anthropic, etc.)",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -15,7 +15,6 @@
     "dev": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --tsconfig tsconfig.build.json --watch",
     "prepublishOnly": "npm run build",
     "test": "jest",
-    "baml:generate": "baml generate",
     "example": "ts-node examples/basic-usage.ts",
     "example:react-basic": "ts-node examples/react-basic-example.ts",
     "example:react-advanced": "ts-node examples/react-advanced-example.ts",
@@ -28,10 +27,9 @@
     "agent",
     "sdk",
     "openai",
-    "anthropic",
-    "baml"
+    "anthropic"
   ],
-  "author": "BoundaryML",
+  "author": "Eric Nunes",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -42,13 +40,15 @@
   },
   "homepage": "https://github.com/ericnunes/frame_agent#readme",
   "dependencies": {
-    "@boundaryml/baml": "^0.207.1",
+    "@anthropic-ai/sdk": "^0.63.1",
     "dotenv": "^17.2.2",
-    "ts-node-dev": "^2.0.0"
+    "openai": "^5.23.0",
+    "ts-node-dev": "^2.0.0",
+    "valibot": "^1.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
-    "tsup": "^8.0.0",
+    "tsup": "^8.5.0",
     "typescript": "^5.9.2"
   },
   "engines": {

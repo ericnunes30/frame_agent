@@ -1,7 +1,7 @@
 // examples/react-basic-example.ts
 // Exemplo básico do modo ReAct usando ferramentas simples
 
-import { ChatAgent } from '../src/chat-agent-core';
+import { ChatAgent } from '../src/core/chat-agent-core';
 import { calculatorTool, dateTimeTool } from './example-tools';
 import dotenv from 'dotenv';
 

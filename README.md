@@ -2,6 +2,9 @@
 
 Um SDK TypeScript completo para criar agentes de IA avançados com múltiplos modos de operação, incluindo Chat, ReAct e Planning com modelos de thinking.
 
+[![npm version](https://img.shields.io/npm/v/@ericnunes/frame_agent.svg)](https://www.npmjs.com/package/@ericnunes/frame_agent)
+[![npm downloads](https://img.shields.io/npm/dt/@ericnunes/frame_agent.svg)](https://www.npmjs.com/package/@ericnunes/frame_agent)
+
 ## Sumário
 
 - [Modos de Operação](#modos-de-operação)
@@ -19,6 +22,11 @@ Um SDK TypeScript completo para criar agentes de IA avançados com múltiplos mo
 
 O SDK suporta três modos principais de operação para diferentes tipos de tarefas:
 
+### ✨ Novidades na versão 1.0.6
+- **Correção do processamento de instruções**: As instruções personalizadas agora são corretamente aplicadas em todos os modos (Chat, ReAct e Planning)
+- **Implementação de mensagens fixas na memória**: O prompt do sistema e a primeira mensagem do usuário são mantidos mesmo durante a poda de memória
+- **Melhoria na robustez do sistema**: Comportamento mais consistente em todos os modos do agente
+
 ### 1. Modo Chat (Padrão)
 Modo de conversa simples para interações diretas. Ideal para perguntas e respostas diretas, conversas casuais e interações básicas.
 
@@ -32,6 +40,8 @@ const agent = new ChatAgent({
 
 ### 2. Modo ReAct (Reasoning + Action)
 Framework para tarefas que requerem raciocínio e ação, usando tools disponíveis. O agente pensa passo a passo, decide quais ações tomar e executa as tools necessárias.
+
+**✅ Corrigido na versão 1.0.6**: O agente agora mantém o prompt do sistema e a primeira mensagem do usuário como fixas na memória, garantindo que instruções importantes não sejam perdidas durante a poda.
 
 ```typescript
 const agent = new ChatAgent({
@@ -78,16 +88,17 @@ npm install @ericnunes/frame_agent
 
 ### Variáveis de Ambiente (.env)
 ```env
-# OpenAI
-OPENAI_API_KEY=sua_chave_api_openai
+# Chave de API para OpenAI (obrigatória para providers OpenAI)
+OPENAI_API_KEY=sua_chave_api_aqui
 
-# OpenAI Compatible
-OPENAI_API_KEY=sua_chave_api
-OPENAI_BASE_URL=URL_da_sua_API_compatível
-MODEL=nome_do_modelo
+# URL base para APIs compatíveis com OpenAI (ex: LocalAI, Ollama, etc.)
+OPENAI_BASE_URL=http://localhost:8080/v1
 
-# Anthropic
-ANTHROPIC_API_KEY=sua_chave_api_anthropic
+# Modelo a ser usado para os agentes
+MODEL=gpt-4o-mini
+
+# Chave de API para Anthropic (obrigatória se usar provider anthropic)
+ANTHROPIC_API_KEY=sua_chave_api_anthropic_aqui
 ```
 
 ## API do ChatAgent
@@ -110,6 +121,30 @@ interface AgentConfig {
   presencePenalty?: number;
   frequencyPenalty?: number;
 }
+```
+
+### Validação com Valibot
+O SDK agora utiliza Valibot para validação de schemas em respostas estruturadas e parâmetros de tools:
+
+```typescript
+import * as v from 'valibot';
+
+// Schema para validação de resposta estruturada
+const UserSchema = v.object({
+  name: v.string(),
+  age: v.pipe(
+    v.number(),
+    v.minValue(0),
+    v.maxValue(120)
+  ),
+  email: v.optional(v.string())
+});
+
+// Usar com sendStructuredMessage
+const response = await agent.sendStructuredMessage(
+  "Crie um usuário com nome 'Maria', idade 28 e cidade 'São Paulo'",
+  UserSchema
+);
 ```
 
 ### Métodos Principais
@@ -216,9 +251,30 @@ O SDK suporta um sistema de tools extensível para os modos ReAct e Planning.
 interface Tool {
   name: string;
   description: string;
-  parameters?: ToolParameters;
+  parameters?: v.GenericSchema | ToolParameters;
   execute: (args: any) => Promise<any>;
 }
+```
+
+### Exemplo de Tool com Valibot
+```typescript
+import * as v from 'valibot';
+
+const calculatorTool: Tool = {
+  name: "calculate",
+  description: "Realiza operações matemáticas básicas",
+  parameters: v.object({
+    expression: v.string()
+  }),
+  execute: async (args: { expression: string }) => {
+    try {
+      const result = eval(args.expression);
+      return { result: Number(result.toFixed(2)) };
+    } catch (error) {
+      throw new Error(`Não foi possível calcular: ${args.expression}`);
+    }
+  }
+};
 ```
 
 ### Exemplo de Tool
@@ -307,9 +363,6 @@ agent.setConfig({
 # Instalar dependências
 npm install
 
-# Gerar cliente BAML
-npx baml generate
-
 # Compilar TypeScript (build)
 npm run build
 
@@ -319,8 +372,10 @@ npm run example
 # Desenvolvimento contínuo (watch mode)
 npm run dev
 
-# Executar testes
-npm test
+# Executar testes unitários
+npm run test
+# ou
+npx ts-node tests/run-unit-tests.ts
 
 # Executar exemplos específicos
 npm run example:react-basic
@@ -331,42 +386,61 @@ npm run example:modes
 
 ### Estrutura do Projeto
 ```
-├── baml_src/              # Arquivos BAML (definições de funções e clients)
-│   ├── clients.baml       # Configuração de clients/providers
-│   └── simple-chat.baml   # Funções BAML
-├── baml_client/           # Cliente TypeScript gerado pelo BAML (NÃO EDITAR)
-├── src/                   # Código TypeScript do SDK
-│   ├── index.ts           # Ponto de entrada principal
-│   ├── chat-agent-core.ts # Implementação principal do agente
-│   ├── tools.ts           # Sistema de tools
-│   └── memory-manager.ts  # Gerenciador de memória
-├── dist/                  # Arquivos compilados (NÃO EDITAR)
-├── docs/                  # Documentação
-├── tests/                 # Testes
-├── examples/              # Exemplos de uso
-├── .env                   # Variáveis de ambiente
-└── package.json           # Dependências e scripts
+├── src/                      # Código TypeScript do SDK
+│   ├── index.ts              # Ponto de entrada principal
+│   ├── core/                 # Componentes principais
+│   │   ├── chat-agent-core.ts # Implementação principal do agente
+│   │   ├── prompt-builder.ts  # Construtor de prompts
+│   │   └── structured-response.ts # Respostas estruturadas
+│   ├── adapters/             # Adaptadores de providers
+│   │   ├── provider-adapter.ts # Interface base para providers
+│   │   ├── openai-adapter.ts   # Adaptador para OpenAI
+│   │   └── anthropic-adapter.ts # Adaptador para Anthropic
+│   ├── tools/                # Sistema de tools
+│   │   └── tools.ts          # Registro e gerenciamento de tools
+│   ├── memory/               # Gerenciamento de memória
+│   │   └── memory-manager.ts # Gerenciador de memória
+│   └── types/                # Definições de tipos
+│       └── types.d.ts        # Tipos personalizados
+├── dist/                     # Arquivos compilados (NÃO EDITAR)
+├── docs/                     # Documentação
+├── tests/                    # Testes
+├── examples/                 # Exemplos de uso
+├── .env                      # Variáveis de ambiente
+└── package.json              # Dependências e scripts
 ```
 
 ### Fluxo de Trabalho
-1. **Definir funções BAML** em `baml_src/*.baml`
-2. **Gerar cliente** com `npx baml generate`
-3. **Implementar lógica** em `src/*.ts`
-4. **Testar** com `npx ts-node tests/*.ts`
+1. **Implementar lógica** nos arquivos apropriados em `src/`
+2. **Testar** com `npx ts-node tests/unit/*.ts`
+3. **Testar correção do modo ReAct** com `npx ts-node tests/unit/react-fix-mock-test.ts`
+
+### ✨ Novos Testes de Validação (v1.0.6)
+- `tests/unit/react-fix-mock-test.ts` - Teste abrangente da correção do modo ReAct com mock
+- `tests/unit/test-react-fix.ts` - Teste da correção com provider real
+- `tests/unit/react-fix-validation-test.ts` - Teste adicional de validação
+- `tests/unit/instructions-verification.ts` - Teste de verificação do processamento de instruções
+- `tests/unit/memory-fixed-test.ts` - Teste de verificação de mensagens fixas na memória
 
 ### Não Editar
-- `baml_client/` - Arquivos gerados automaticamente
 - `dist/` - Arquivos compilados
+- `tests/unit/test-react-fix.ts` - Teste de validação da correção do modo ReAct
+- `tests/unit/react-fix-mock-test.ts` - Teste de validação da correção do modo ReAct com mock
 
 ## Publicação no NPM
 
 Para publicar uma nova versão do SDK:
 
-1. Atualizar o número da versão no `package.json`
+1. Atualizar o número da versão com `npm version patch` (ou minor/major conforme necessário)
 2. Executar `npm run build` para compilar o código
 3. Executar `npm publish` para publicar no NPM
 
 O script `prepublishOnly` é configurado para compilar automaticamente antes da publicação.
+
+### ✨ Melhorias na v1.0.6
+- **Processamento de instruções**: As instruções personalizadas agora são corretamente aplicadas em todos os modos
+- **Mensagens fixas na memória**: O prompt do sistema e a primeira mensagem do usuário são mantidos durante a poda
+- **Consistência aprimorada**: Comportamento mais uniforme em todos os modos do agente
 
 ### Pré-requisitos
 - Conta no NPM com permissões para publicar no escopo `@ericnunes`
@@ -374,10 +448,18 @@ O script `prepublishOnly` é configurado para compilar automaticamente antes da 
 
 ### Processo de Publicação
 ```bash
-# 1. Atualizar versão no package.json
+# 1. Atualizar versão (ex: patch)
+npm version patch
+
 # 2. Compilar o código
 npm run build
 
 # 3. Publicar no NPM
 npm publish
+```
+
+### ✨ Dica para Windows
+Se estiver no Windows e encontrar problemas com o `tsup`, instale-o globalmente:
+```bash
+npm install -g tsup
 ```

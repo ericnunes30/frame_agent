@@ -1,7 +1,7 @@
 // examples/react-advanced-example.ts
 // Exemplo avançado do modo ReAct com múltiplas ferramentas
 
-import { ChatAgent } from '../src/chat-agent-core';
+import { ChatAgent } from '../src/core/chat-agent-core';
 import { calculatorTool, dateTimeTool, weatherTool } from './example-tools';
 import dotenv from 'dotenv';
 

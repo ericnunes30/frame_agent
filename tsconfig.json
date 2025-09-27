@@ -18,7 +18,8 @@
     "isolatedModules": true
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "baml_client/**/*"
   ],
   "exclude": [
     "node_modules", 
