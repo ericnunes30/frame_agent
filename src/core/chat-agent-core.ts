@@ -130,6 +130,8 @@ constructor(config: AgentConfig) {
 // Método para enviar uma mensagem e obter uma resposta
   async sendMessage(message: string, dynamicConfig?: DynamicConfig): Promise<string> {
     try {
+      
+
       // Verificar se é a primeira mensagem do usuário
       const currentMessages = this.memoryManager.getMessages();
       const hasUserMessage = currentMessages.some(msg => msg.role === 'user');
@@ -237,11 +239,6 @@ constructor(config: AgentConfig) {
     // Configurar parâmetros
     const params: any = {
       messages,
-      tools: availableTools.map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters
-      })),
       temperature: dynamicConfig?.temperature ?? this.config.temperature,
       maxTokens: dynamicConfig?.maxTokens ?? this.config.maxTokens,
       topP: dynamicConfig?.topP ?? this.config.topP,
@@ -264,7 +261,7 @@ constructor(config: AgentConfig) {
         return await this.executePlanningMode(message, dynamicConfig);
       case 'chat':
       default:
-        // Default para modo chat
+        // Modo chat padrão
         return await this.callProviderFunction(message, dynamicConfig);
     }
   }
@@ -359,6 +356,18 @@ constructor(config: AgentConfig) {
         // Parse da resposta para extrair Thought/Action
         const parsedResponse = this.parseReActResponse(llmResponse);
         
+        // Log da resposta do LLM e parseada para debug (apenas se DEBUG=true ou ENABLE_DEBUG=true)
+        if (process.env.DEBUG === 'true' || process.env.ENABLE_DEBUG === 'true') {
+          console.log(`=== LLM RESPONSE (Step ${step + 1}) ===`);
+          console.log(llmResponse);
+          console.log('====================================');
+          
+          // Log da resposta parseada para debug
+          console.log(`=== PARSED RESPONSE (Step ${step + 1}) ===`);
+          console.log(JSON.stringify(parsedResponse, null, 2));
+          console.log('====================================');
+        }
+        
         // Adicionar passo ao processo
         const reactStep: ReActStep = {
           stepNumber: step + 1,
@@ -369,16 +378,65 @@ constructor(config: AgentConfig) {
         
         reactProcess.steps.push(reactStep);
         
-        // Executar ação se houver
+// Executar ação se houver
         if (parsedResponse.action) {
+          // ADICIONAR VERIFICAÇÃO DE FINAL_ANSWER ANTES DA EXECUÇÃO (Gargalo 4)
+          // Tratar final_answer como protocolo de encerramento, não como uma ferramenta
+          if (parsedResponse.action?.name === "final_answer") {
+            reactProcess.finalAnswer = parsedResponse.action.input.response || parsedResponse.action.input;
+            reactProcess.status = 'completed';
+            reactProcess.endTime = new Date();
+            this.memoryManager.setVariable(`react_process_${processId}`, reactProcess);
+            
+            // Retornar ao modo chat após término
+            this.config.mode = 'chat';
+            return reactProcess.finalAnswer || "Resposta final fornecida.";
+          }
+          
+          // Verificar se a ferramenta existe no registry antes de executar
+          const tool = this.toolRegistry.get(parsedResponse.action.name);
+          if (!tool) {
+            throw new Error(`Ferramenta '${parsedResponse.action.name}' não encontrada no registry`);
+          }
+          
+          // Log do pensamento antes de executar a tool (apenas se DEBUG=true ou ENABLE_DEBUG=true)
+          if (process.env.DEBUG === 'true' || process.env.ENABLE_DEBUG === 'true') {
+            console.log(`=== REACT THOUGHT (Step ${step + 1}) ===`);
+            console.log(`Thought: ${parsedResponse.thought}`);
+            console.log('====================================');
+            
+            // Log da ação que será executada
+            console.log(`=== EXECUTING TOOL (Step ${step + 1}) ===`);
+            console.log(`Tool: ${parsedResponse.action.name}`);
+            console.log(`Action Input: ${JSON.stringify(parsedResponse.action.input, null, 2)}`);
+            console.log('====================================');
+          } else {
+            // Mostrar pensamento de forma mais amigável para o usuário
+            console.log(`[Pensamento] ${parsedResponse.thought}`);
+          }
+          
           try {
             const observation = await this.executeTool(
               parsedResponse.action.name, 
               parsedResponse.action.input
             );
             reactStep.observation = observation;
+            
+            // Log do resultado da tool (apenas se DEBUG=true ou ENABLE_DEBUG=true)
+            if (process.env.DEBUG === 'true' || process.env.ENABLE_DEBUG === 'true') {
+              console.log(`=== TOOL RESULT (Step ${step + 1}) ===`);
+              console.log(`Result: ${JSON.stringify(observation, null, 2)}`);
+              console.log('==================================');
+            }
           } catch (error: any) {
             reactStep.observation = { error: error.message };
+            
+            // Log do erro da tool (apenas se DEBUG=true ou ENABLE_DEBUG=true)
+            if (process.env.DEBUG === 'true' || process.env.ENABLE_DEBUG === 'true') {
+              console.log(`=== TOOL ERROR (Step ${step + 1}) ===`);
+              console.log(`Error: ${error.message}`);
+              console.log('==================================');
+            }
           }
         }
         
@@ -396,6 +454,9 @@ constructor(config: AgentConfig) {
 
       // Armazenar processo na memória
       this.memoryManager.setVariable(`react_process_${processId}`, reactProcess);
+      
+      // ADICIONAR LÓGICA DE TRANSIÇÃO PARA MODO CHAT APÓS TÉRMINO DO REACT (Gargalo 2)
+      this.config.mode = 'chat'; // Retornar ao modo chat após conclusão do ReAct
       
       return reactProcess.finalAnswer || "Não foi possível determinar uma resposta final.";
       
@@ -515,6 +576,13 @@ constructor(config: AgentConfig) {
         try {
           const actionInput = JSON.parse(actionInputLine.replace('Action Input:', '').trim());
           action = { name: actionName, input: actionInput };
+          
+          // ADICIONAR VERIFICAÇÃO DA TOOL FINAL_ANSWER (Gargalo 1)
+          // Tratar final_answer como protocolo de encerramento, não como uma ferramenta
+          if (action?.name === "final_answer") {
+            isFinalAnswer = true;
+            finalAnswer = action.input.response || action.input;
+          }
         } catch (e) {
           // Se não conseguir parsear JSON, usar string simples
           action = { name: actionName, input: actionInputLine.replace('Action Input:', '').trim() };
@@ -802,7 +870,9 @@ Instruções:
     return this.toolRegistry.list();
   }
 
-async executeTool(toolName: string, args: any): Promise<any> {
+  
+
+  async executeTool(toolName: string, args: any): Promise<any> {
     const tool = this.toolRegistry.get(toolName);
     if (!tool) {
       throw new Error(`Tool '${toolName}' não encontrada`);

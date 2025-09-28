@@ -24,7 +24,6 @@ export type ProviderType =
 // Parâmetros para envio de mensagens
 export interface SendMessageParams {
   messages: ChatMessage[];
-  tools?: ToolDefinition[];
   temperature?: number;
   maxTokens?: number;
   topP?: number;
