@@ -31,8 +31,7 @@ export class OpenAIAdapter implements ProviderAdapter {
         max_tokens: params.maxTokens,
         top_p: params.topP,
         presence_penalty: params.presencePenalty,
-        frequency_penalty: params.frequencyPenalty,
-        tools: params.tools ? this.mapToolsToOpenAIFormat(params.tools) : undefined
+        frequency_penalty: params.frequencyPenalty
       });
 
       return {

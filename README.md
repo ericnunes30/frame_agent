@@ -1,6 +1,6 @@
 # Frame Agent SDK
 
-Um SDK TypeScript completo para criar agentes de IA avançados com múltiplos modos de operação, incluindo Chat, ReAct e Planning com modelos de thinking.
+Um SDK TypeScript completo para criar agentes de IA avançados com múltiplos modos de operação, incluindo Chat, ReAct, Planning e o inovador modelo híbrido adaptativo.
 
 [![npm version](https://img.shields.io/npm/v/@ericnunes/frame_agent.svg)](https://www.npmjs.com/package/@ericnunes/frame_agent)
 [![npm downloads](https://img.shields.io/npm/dt/@ericnunes/frame_agent.svg)](https://www.npmjs.com/package/@ericnunes/frame_agent)
@@ -8,9 +8,10 @@ Um SDK TypeScript completo para criar agentes de IA avançados com múltiplos mo
 ## Sumário
 
 - [Modos de Operação](#modos-de-operação)
+- [Novo Modelo Híbrido Adaptativo](#novo-modelo-híbrido-adaptativo)
 - [Instalação](#instalação)
 - [Configuração](#configuração)
-- [API do ChatAgent](#api-do-chatagent)
+- [API do ChatAgent e HybridAgent](#api-do-chatagent-e-hybridagent)
 - [Exemplos Práticos](#exemplos-práticos)
 - [Tools](#tools)
 - [Gerenciamento de Memória e Contexto](#gerenciamento-de-memória-e-contexto)
@@ -22,7 +23,11 @@ Um SDK TypeScript completo para criar agentes de IA avançados com múltiplos mo
 
 O SDK suporta três modos principais de operação para diferentes tipos de tarefas:
 
-### ✨ Novidades na versão 1.0.6
+### ✨ Novidades na versão 1.0.17
+- **Novo Modelo Híbrido Adaptativo**: Implementação do inovador modelo "ReAct Híbrido Adaptativo" que combina conversação fluida com execução estruturada de ações
+- **Detecção automática de necessidade de ferramentas**: O sistema detecta inteligentemente quando usar ferramentas sem depender de palavras-chave específicas
+- **Internacionalização completa**: Funciona em qualquer idioma sem necessidade de palavras-chave específicas
+- **Experiência unificada**: Um único modelo que se adapta dinamicamente entre conversação e execução de tarefas
 - **Correção do processamento de instruções**: As instruções personalizadas agora são corretamente aplicadas em todos os modos (Chat, ReAct e Planning)
 - **Implementação de mensagens fixas na memória**: O prompt do sistema e a primeira mensagem do usuário são mantidos mesmo durante a poda de memória
 - **Melhoria na robustez do sistema**: Comportamento mais consistente em todos os modos do agente
@@ -78,6 +83,69 @@ const agent = new ChatAgent({
 });
 ```
 
+## Novo Modelo Híbrido Adaptativo
+
+O SDK agora inclui o inovador **modelo híbrido adaptativo**, que representa uma evolução significativa na arquitetura de agentes de IA:
+
+### ✨ Características do Modelo Híbrido Adaptativo
+
+- **Único modo inteligente**: Combina conversação fluida com execução estruturada de ações em um único modelo
+- **Detecção automática de necessidade de ferramentas**: O sistema detecta inteligentemente quando usar ferramentas sem depender de palavras-chave específicas
+- **Experiência de usuário contínua**: Sem transições explícitas de modo para o usuário - o agente decide quando usar ferramentas
+- **Internacionalização completa**: Funciona em qualquer idioma sem necessidade de palavras-chave específicas
+- **Eficiência otimizada**: Respostas conversacionais rápidas para tarefas simples, processamento completo para tarefas complexas
+- **Arquitetura coesa**: Modelo único que se adapta dinamicamente baseado na tarefa
+
+### 🔄 Como Funciona
+
+O modelo híbrido adaptativo:
+
+1. **Mantém instruções ReAct sempre ativas** no prompt, permitindo ao LLM decidir quando usar ferramentas
+2. **Opera em modo conversacional** até detectar necessidade de ações estruturadas
+3. **Transiciona automaticamente para formato ReAct** quando necessário
+4. **Volta ao modo conversacional após completar tarefas** com `final_answer`
+5. **Detecta semanticamente** a necessidade de ferramentas sem depender de palavras-chave específicas
+
+### 💡 Uso do HybridAgent
+
+```typescript
+import { HybridAgent } from '@ericnunes/frame_agent';
+import { OpenAIAdapter } from '@ericnunes/frame_agent';
+
+// Criar um adaptador
+const apiKey = process.env.OPENAI_API_KEY;
+const adapter = new OpenAIAdapter({
+  apiKey,
+  model: 'gpt-4o-mini',
+});
+
+// Criar o agente híbrido
+const agent = new HybridAgent(adapter);
+
+// Registrar ferramentas
+agent.registerTool({
+  name: "get_current_time",
+  description: "Obtém a hora atual",
+  parameters: {
+    type: "object",
+    properties: {},
+  },
+  execute: async (args: any) => {
+    return { time: new Date().toISOString() };
+  },
+});
+
+// O agente decide automaticamente quando usar ferramentas
+const response1 = await agent.sendMessage("Olá! Tudo bem?");
+// Resposta conversacional normal
+
+const response2 = await agent.sendMessage("Que horas são agora?");
+// O agente detecta necessidade de usar ferramenta e responde adequadamente
+
+const response3 = await agent.sendMessage("Obrigado pela informação!");
+// Volta ao modo conversacional
+```
+
 ## Instalação
 
 ```bash
@@ -101,11 +169,16 @@ MODEL=gpt-4o-mini
 ANTHROPIC_API_KEY=sua_chave_api_anthropic_aqui
 ```
 
-## API do ChatAgent
+## API do ChatAgent e HybridAgent
 
-### Construtor
+### Construtor ChatAgent
 ```typescript
 new ChatAgent(config: AgentConfig)
+```
+
+### Construtor HybridAgent
+```typescript
+new HybridAgent(provider: ProviderAdapter)
 ```
 
 ### Interface AgentConfig
@@ -240,6 +313,60 @@ agent.registerTool(weatherTool);
 
 const response = await agent.sendMessage("Planeje minha semana: verifique a data atual, calcule quantos dias faltam para o final do mês e me diga qual será o clima nesses dias.");
 console.log('Resposta:', response);
+```
+
+### Modelo Híbrido Adaptativo
+```typescript
+import { HybridAgent } from '@ericnunes/frame_agent';
+import { OpenAIAdapter } from '@ericnunes/frame_agent';
+
+// Criar um adaptador OpenAI
+const apiKey = process.env.OPENAI_API_KEY;
+const adapter = new OpenAIAdapter({
+  apiKey,
+  model: 'gpt-4o-mini',
+});
+
+// Criar o agente híbrido
+const agent = new HybridAgent(adapter);
+
+// Registrar tools
+agent.registerTool({
+  name: "get_current_time",
+  description: "Obtém a hora atual em qualquer fuso horário",
+  parameters: {
+    type: "object",
+    properties: {
+      timezone: {
+        type: "string",
+        description: "Fuso horário opcional (ex: 'UTC', 'America/Sao_Paulo')"
+      }
+    },
+  },
+  execute: async (args: any) => {
+    const timezone = args.timezone || 'UTC';
+    const now = new Date();
+    return {
+      time: now.toISOString(),
+      formatted: now.toLocaleTimeString('pt-BR', { timeZone: timezone }),
+      timezone: timezone
+    };
+  },
+});
+
+// O agente decide automaticamente quando usar ferramentas
+const response1 = await agent.sendMessage("Oi! Tudo bem?");
+// Resposta conversacional normal
+
+const response2 = await agent.sendMessage("Que horas são agora?");
+// O agente detecta necessidade de usar ferramenta e responde adequadamente
+
+const response3 = await agent.sendMessage("Obrigado! A hora está perfeita.");
+// Volta ao modo conversacional
+
+// Funciona em qualquer idioma
+const response4 = await agent.sendMessage("Hello! What time is it?");
+// Detecção automática sem depender de palavras-chave específicas
 ```
 
 ## Tools
@@ -377,6 +504,9 @@ npm run test
 # ou
 npx ts-node tests/run-unit-tests.ts
 
+# Executar teste do modelo híbrido adaptativo
+npx ts-node test_hybrid_agent.ts
+
 # Executar exemplos específicos
 npm run example:react-basic
 npm run example:react-advanced
@@ -390,7 +520,11 @@ npm run example:modes
 │   ├── index.ts              # Ponto de entrada principal
 │   ├── core/                 # Componentes principais
 │   │   ├── chat-agent-core.ts # Implementação principal do agente
+│   │   ├── hybrid-agent-core.ts # Implementação do novo modelo híbrido adaptativo
 │   │   ├── prompt-builder.ts  # Construtor de prompts
+│   │   ├── hybrid-prompt-builder.ts # Construtor de prompts híbridos
+│   │   ├── tool-detection-engine.ts # Detector de necessidade de ferramentas
+│   │   ├── adaptive-executor.ts # Executor adaptativo
 │   │   └── structured-response.ts # Respostas estruturadas
 │   ├── adapters/             # Adaptadores de providers
 │   │   ├── provider-adapter.ts # Interface base para providers
@@ -406,6 +540,10 @@ npm run example:modes
 ├── docs/                     # Documentação
 ├── tests/                    # Testes
 ├── examples/                 # Exemplos de uso
+├── examples/                 # Exemplos de uso
+│   ├── hybrid_agent_demo.ts     # Demonstração do modelo híbrido
+│   └── hybrid_agent_international.ts # Exemplo internacionalizado
+├── test_hybrid_agent.ts      # Teste de integração para o modelo híbrido adaptativo
 ├── .env                      # Variáveis de ambiente
 └── package.json              # Dependências e scripts
 ```
@@ -415,12 +553,13 @@ npm run example:modes
 2. **Testar** com `npx ts-node tests/unit/*.ts`
 3. **Testar correção do modo ReAct** com `npx ts-node tests/unit/react-fix-mock-test.ts`
 
-### ✨ Novos Testes de Validação (v1.0.6)
+### ✨ Novos Testes de Validação (v1.0.6 e v1.0.16)
 - `tests/unit/react-fix-mock-test.ts` - Teste abrangente da correção do modo ReAct com mock
 - `tests/unit/test-react-fix.ts` - Teste da correção com provider real
 - `tests/unit/react-fix-validation-test.ts` - Teste adicional de validação
 - `tests/unit/instructions-verification.ts` - Teste de verificação do processamento de instruções
 - `tests/unit/memory-fixed-test.ts` - Teste de verificação de mensagens fixas na memória
+- `test_hybrid_agent.ts` - Teste de integração para o modelo híbrido adaptativo (v1.0.16)
 
 ### Não Editar
 - `dist/` - Arquivos compilados

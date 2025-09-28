@@ -1,6 +1,7 @@
 // src/index.ts - Ponto de entrada principal do SDK
 
 export { ChatAgent } from './core/chat-agent-core';
+export { HybridAgent } from './core/hybrid-agent-core';
 export type { AgentConfig, ProviderType } from './core/chat-agent-core';
 export type { Tool, ToolParameter, ToolParameters } from './tools/tools';
 export { ToolRegistry } from './tools/tools';
