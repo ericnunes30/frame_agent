@@ -1,7 +1,7 @@
 {
   "name": "@ericnunes/frame_agent",
-  "version": "1.0.17",
-  "description": "SDK para criação de agentes de IA com suporte a múltiplos providers (OpenAI, Anthropic, etc.)",
+  "version": "1.1.4",
+  "description": "SDK para criação de agentes de IA com suporte a múltiplos providers (OpenAI, Anthropic e OpenAICompatible.)",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

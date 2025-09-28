@@ -1,4 +1,5 @@
 import { Tool } from '../adapters/provider-adapter';
+import { debugLog } from '../utils/debug-logger';
 
 export class ToolDetectionEngine {
   /**
@@ -6,17 +7,28 @@ export class ToolDetectionEngine {
    * e intenção da mensagem do usuário
    */
   detectToolUsageIntent(userMessage: string, availableTools: Tool[]): boolean {
+    debugLog(`ToolDetectionEngine.detectToolUsageIntent`);
+    debugLog(`  Message: ${userMessage}`);
+    
     // Análise semântica da mensagem para detectar necessidade de ações
     const hasActionKeywords = this.hasActionKeywords(userMessage);
     const hasToolRelatedIntent = this.hasToolRelatedIntent(userMessage);
     const complexityScore = this.assessComplexity(userMessage);
     const toolRelevance = this.calculateToolRelevance(userMessage, availableTools);
     
+    debugLog(`  Has action keywords: ${hasActionKeywords}`);
+    debugLog(`  Has tool related intent: ${hasToolRelatedIntent}`);
+    debugLog(`  Complexity score: ${complexityScore}`);
+    debugLog(`  Tool relevance: ${toolRelevance}`);
+    
     // Combinação de fatores para decisão
     const shouldUseTools = 
-      (hasActionKeywords && toolRelevance > 0.3) || 
-      (hasToolRelatedIntent && complexityScore > 0.6) || 
-      toolRelevance > 0.7;
+      (hasActionKeywords && toolRelevance > 0.15) || 
+      (hasToolRelatedIntent && complexityScore > 0.4) || 
+      toolRelevance > 0.5 ||
+      complexityScore > 0.8;
+    
+    debugLog(`  Should use tools: ${shouldUseTools}`);
     
     return shouldUseTools;
   }
@@ -116,17 +128,28 @@ export class ToolDetectionEngine {
     currentContext: any[]
   ): 'continue-chat' | 'enter-react' | 'exit-react' {
     
+    debugLog(`ToolDetectionEngine.detectTransitionState`);
+    debugLog(`  Message: ${userMessage}`);
+    debugLog(`  Available tools: ${availableTools.map(t => t.name).join(', ')}`);
+    debugLog(`  Current context length: ${currentContext.length}`);
+    
     // Verifica se o usuário solicitou uma ação que requer ferramentas
-    if (this.detectToolUsageIntent(userMessage, availableTools)) {
+    const shouldUseTools = this.detectToolUsageIntent(userMessage, availableTools);
+    debugLog(`  Should use tools: ${shouldUseTools}`);
+    
+    if (shouldUseTools) {
+      debugLog(`  Returning: enter-react`);
       return 'enter-react';
     }
     
     // Verifica se a conversa está retornando a um estado conversacional
     if (currentContext.length > 0 && this.isConversationalResponse(userMessage)) {
+      debugLog(`  Returning: continue-chat (conversational response)`);
       return 'continue-chat';
     }
     
     // Caso contrário, mantém o estado atual
+    debugLog(`  Returning: continue-chat (default)`);
     return 'continue-chat';
   }
   

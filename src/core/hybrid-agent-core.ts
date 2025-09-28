@@ -2,6 +2,7 @@ import { ProviderAdapter, ChatMessage, Tool } from '../adapters/provider-adapter
 import { HybridPromptBuilder } from './hybrid-prompt-builder';
 import { ToolDetectionEngine } from './tool-detection-engine';
 import { AdaptiveExecutor } from './adaptive-executor';
+import { debugLog, conditionalLog } from '../utils/debug-logger';
 
 /**
  * Agente híbrido adaptativo que combina conversação fluida com execução estruturada de ações
@@ -41,20 +42,30 @@ export class HybridAgent {
    * Envia uma mensagem e recebe resposta adaptativa
    */
   async sendMessage(message: string, options: { stream?: boolean } = {}): Promise<any> {
+    debugLog(`HybridAgent.sendMessage`);
+    debugLog(`  Message: ${message}`);
+    debugLog(`  Current state: ${this.hybridState}`);
+    debugLog(`  History length: ${this.history.length}`);
+    
     // Adiciona a mensagem do usuário ao histórico
     this.history.push({ role: 'user', content: message });
     
     // Detecta se é necessário transicionar para modo ReAct
     const tools = Array.from(this.toolRegistry.values());
+    debugLog(`Available tools: ${tools.map(t => t.name).join(', ')}`);
+    
     const transitionState = this.toolDetectionEngine.detectTransitionState(
       message, 
       tools, 
       this.history
     );
     
+    debugLog(`Transition state: ${transitionState}`);
+    
     // Atualiza o estado conforme necessário
     if (transitionState === 'enter-react') {
       this.hybridState = 'react';
+      debugLog(`Updated state to: ${this.hybridState}`);
     }
 
     // Constroi o prompt híbrido com base no estado atual
@@ -76,6 +87,8 @@ export class HybridAgent {
       { role: 'user', content: message }
     ];
     
+    debugLog(`Calling AdaptiveExecutor with state: ${this.hybridState}`);
+    
     // Executa usando o executor adaptativo
     const result = await this.adaptiveExecutor.executeAdaptive(
       this.provider,
@@ -84,6 +97,9 @@ export class HybridAgent {
       this.hybridState
     );
 
+    debugLog(`AdaptiveExecutor result newState: ${result.newState}`);
+    debugLog(`AdaptiveExecutor result response length: ${result.response.length}`);
+
     // Atualiza o estado híbrido com base no resultado
     this.hybridState = result.newState;
     
@@ -91,6 +107,7 @@ export class HybridAgent {
     this.history.push({ role: 'assistant', content: result.response });
 
     // Retorna a resposta
+    debugLog(`Returning response with length: ${result.response.length}`);
     return result.response;
   }
 
