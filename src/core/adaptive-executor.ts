@@ -1,5 +1,6 @@
 import { ChatMessage, ProviderAdapter } from '../adapters/provider-adapter';
 import { Tool } from '../adapters/provider-adapter';
+import { debugLog, conditionalLog, infoLog } from '../utils/debug-logger';
 
 export class AdaptiveExecutor {
   /**
@@ -11,14 +12,22 @@ export class AdaptiveExecutor {
     tools: Tool[],
     state: 'chat' | 'react'
   ): Promise<{ response: string; newState: 'chat' | 'react' }> {
+    debugLog(`AdaptiveExecutor.executeAdaptive`);
+    debugLog(`  State: ${state}`);
+    debugLog(`  Messages count: ${messages.length}`);
+    debugLog(`  Tools count: ${tools.length}`);
+    
     if (state === 'react') {
       // Execução ReAct: parsing e execução de ações
+      debugLog(`Executing ReAct mode`);
       return await this.executeReact(adapter, messages, tools);
     } else {
       // Execução conversacional normal
+      debugLog(`Executing chat mode`);
       return await this.executeChat(adapter, messages, tools);
     }
   }
+
 
   /**
    * Executa no modo conversacional
@@ -30,18 +39,17 @@ export class AdaptiveExecutor {
   ): Promise<{ response: string; newState: 'chat' | 'react' }> {
     // No modo chat, ainda precisamos verificar se a resposta contém
     // comandos ReAct que precisam ser detectados
-    const response = await adapter.callProviderFunction({
-      messages,
-      stream: false
+    const responseObj = await adapter.sendMessage({
+      messages
     });
 
     // Verificar se a resposta contém estrutura ReAct
-    if (this.containsReActStructure(response)) {
+    if (this.containsReActStructure(responseObj.content)) {
       // A IA decidiu iniciar modo ReAct, então mudamos o estado
-      return { response, newState: 'react' };
+      return { response: responseObj.content, newState: 'react' };
     }
 
-    return { response, newState: 'chat' };
+    return { response: responseObj.content, newState: 'chat' };
   }
 
   /**
@@ -52,33 +60,90 @@ export class AdaptiveExecutor {
     messages: ChatMessage[],
     tools: Tool[]
   ): Promise<{ response: string; newState: 'chat' | 'react' }> {
-    // Chama o provedor para obter resposta formatada ReAct
-    const response = await adapter.callProviderFunction({
-      messages,
-      stream: false
-    });
-
-    // Verificar se a resposta contém estrutura ReAct (Thought/Action/Observation)
-    if (this.containsReActStructure(response)) {
-      const { thought, action, actionInput } = this.parseReActResponse(response);
+    // Copiar mensagens para não modificar o array original
+    let currentMessages = [...messages];
+    let iterationCount = 0;
+    
+    // Armazenar histórico de execução para retorno
+    let executionHistory: string[] = [];
+    
+    // Executar ciclo ReAct completo indefinidamente até receber final_answer
+    while (true) {
+      debugLog(`Iteração ReAct ${iterationCount + 1}`);
       
-      if (action && actionInput) {
-        // Executar a ação usando as ferramentas
-        const toolResult = await this.executeTool(action, actionInput, tools);
+      // Chama o provedor para obter resposta formatada ReAct
+      const responseObj = await adapter.sendMessage({
+        messages: currentMessages
+      });
+
+      debugLog(`Resposta LLM: ${responseObj.content.substring(0, 200)}...}`);
+
+      // Armazenar resposta para histórico de execução
+      executionHistory.push(responseObj.content);
+      
+      // Verificar se a resposta contém estrutura ReAct (Thought/Action/Observation)
+      if (this.containsReActStructure(responseObj.content)) {
+        const { thought, action, actionInput } = this.parseReActResponse(responseObj.content);
         
-        // Retornar resposta com nova mensagem de observação
-        return { 
-          response: response + `\nObservation: ${JSON.stringify(toolResult)}`, 
-          newState: 'react' 
-        };
-      } else if (this.containsFinalAnswer(response)) {
-        // Detecta final_answer e retorna para modo chat
-        return { response, newState: 'chat' };
+        debugLog(`Estrutura ReAct detectada:`);
+        debugLog(`  Thought: ${thought ? thought.substring(0, 100) + '...' : 'null'}`);
+        debugLog(`  Action: ${action}`);
+        debugLog(`  Action Input: ${actionInput ? JSON.stringify(actionInput).substring(0, 100) + '...' : 'null'}`);
+        
+        // Exibir pensamento se houver
+        if (thought) {
+          conditionalLog(`[Pensamento] ${thought}`);
+        }
+        
+        if (action && actionInput) {
+          // Verificar se é final_answer
+          if (this.containsFinalAnswer(responseObj.content)) {
+            debugLog(`Final answer detectada, encerrando ciclo`);
+            // Detecta final_answer e retorna resposta final
+            return { response: responseObj.content, newState: 'chat' };
+          }
+          
+          // Executar ação usando as ferramentas
+          infoLog(`=== TOOL EXECUTION ===`);
+          infoLog(`Tool: ${action}`);
+          infoLog(`${JSON.stringify(actionInput, null, 2)}`);
+          infoLog(`====================`);
+          
+          const toolResult = await this.executeTool(action, actionInput, tools);
+          
+          infoLog(`=== TOOL RESULT ===`);
+          infoLog(`${JSON.stringify(toolResult, null, 2)}`);
+          infoLog(`==================`);
+          
+          // Adicionar observação ao histórico de mensagens
+          const observationMessage = `Observation: ${JSON.stringify(toolResult)}`;
+          currentMessages.push({ role: 'assistant', content: responseObj.content });
+          currentMessages.push({ role: 'user', content: observationMessage });
+          
+          // Adicionar observação ao histórico de execução
+          executionHistory.push(observationMessage);
+          
+          // Incrementar contador de iterações
+          iterationCount++;
+          
+          // Continuar ciclo com novo estado
+          continue;
+        } else {
+          debugLog(`Ação ou input ausente, continuando ciclo`);
+        }
+      } else {
+        debugLog(`Estrutura ReAct não detectada`);
+        // Não contém estrutura ReAct - pode ser resposta final
+        if (this.containsFinalAnswer(responseObj.content)) {
+          debugLog(`Final answer detectada (sem estrutura ReAct), encerrando ciclo`);
+          return { response: responseObj.content, newState: 'chat' };
+        }
+        
+        // Adicionar resposta ao histórico e continuar
+        currentMessages.push({ role: 'assistant', content: responseObj.content });
+        iterationCount++;
       }
     }
-
-    // Se não contém estrutura ReAct ou é final_answer, retornar para chat
-    return { response, newState: 'chat' };
   }
 
   /**
