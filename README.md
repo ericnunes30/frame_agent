@@ -23,7 +23,7 @@ Um SDK TypeScript completo para criar agentes de IA avançados com múltiplos mo
 
 O SDK suporta três modos principais de operação para diferentes tipos de tarefas:
 
-### ✨ Novidades na versão 1.0.17
+### ✨ Novidades na versão 1.2.0
 - **Novo Modelo Híbrido Adaptativo**: Implementação do inovador modelo "ReAct Híbrido Adaptativo" que combina conversação fluida com execução estruturada de ações
 - **Detecção automática de necessidade de ferramentas**: O sistema detecta inteligentemente quando usar ferramentas sem depender de palavras-chave específicas
 - **Internacionalização completa**: Funciona em qualquer idioma sem necessidade de palavras-chave específicas
@@ -31,6 +31,10 @@ O SDK suporta três modos principais de operação para diferentes tipos de tare
 - **Correção do processamento de instruções**: As instruções personalizadas agora são corretamente aplicadas em todos os modos (Chat, ReAct e Planning)
 - **Implementação de mensagens fixas na memória**: O prompt do sistema e a primeira mensagem do usuário são mantidos mesmo durante a poda de memória
 - **Melhoria na robustez do sistema**: Comportamento mais consistente em todos os modos do agente
+- **Detecção e correção de formato ReAct**: O sistema agora detecta automaticamente quando o LLM sai do formato estruturado e aplica correções para manter a integridade do fluxo ReAct
+- **Validação de formato ReAct**: Verificação rigorosa para garantir que as respostas do LLM sigam o padrão (Thought/Action/Action Input)
+- **Mecanismo de reintegração**: Quando o formato é incorreto, o sistema envia mensagens de correção para o LLM automaticamente
+- **Controles avançados de loop**: Detecção aprimorada de loops com sistema de aviso e limitação de ações
 
 ### 1. Modo Chat (Padrão)
 Modo de conversa simples para interações diretas. Ideal para perguntas e respostas diretas, conversas casuais e interações básicas.
@@ -45,6 +49,18 @@ const agent = new ChatAgent({
 
 ### 2. Modo ReAct (Reasoning + Action)
 Framework para tarefas que requerem raciocínio e ação, usando tools disponíveis. O agente pensa passo a passo, decide quais ações tomar e executa as tools necessárias.
+
+**✅ Recurso de Detecção e Validação de Formato**: O modo ReAct inclui mecanismos avançados que:
+- **Validação de formato ReAct**: Verifica se as respostas do LLM seguem o formato estruturado (Thought/Action/Action Input)
+- **Detecção de desvios de formato**: Identifica quando o LLM responde em formato livre em vez do formato estruturado
+- **Mecanismo de reintegração**: Ao detectar formato incorreto, envia mensagens de correção para o LLM
+- **Detecção de loops**: Monitora execuções repetidas de ferramentas com os mesmos parâmetros
+
+**✅ Controles avançados de loop**:
+- Detecta quando a mesma ferramenta é executada 3 vezes consecutivas com os mesmos inputs
+- Emite uma mensagem do sistema alertando sobre o loop
+- Permite 3 ações adicionais para o agente contornar o problema
+- Se o loop persistir após as 3 ações, interrompe o modo ReAct e retorna ao modo chat
 
 **✅ Corrigido na versão 1.0.6**: O agente agora mantém o prompt do sistema e a primeira mensagem do usuário como fixas na memória, garantindo que instruções importantes não sejam perdidas durante a poda.
 
@@ -510,8 +526,16 @@ npx ts-node test_hybrid_agent.ts
 # Executar exemplos específicos
 npm run example:react-basic
 npm run example:react-advanced
+npm run example:react-loop-detection
 npm run example:planning
 npm run example:modes
+
+# Executar testes específicos
+npm run test
+npx ts-node tests/unit/loop-detection-demo.ts
+npx ts-node tests/unit/format-validation-test.ts
+npx ts-node tests/unit/simple-loop-test.ts
+npx ts-node tests/unit/loop-detection-verification.ts
 ```
 
 ### Estrutura do Projeto

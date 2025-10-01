@@ -13,3 +13,4 @@ export {
   DynamicWindowMemory,
   ContextVariables 
 } from './memory/memory-manager';
+export { finalAnswerTool } from './tools/final-answer-tool';

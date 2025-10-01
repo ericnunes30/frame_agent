@@ -68,7 +68,7 @@ export class PromptBuilder {
 Your operational framework is the ReAct (Reasoning and Acting) loop. You MUST strictly follow this format for every turn:
 
 Thought: Reason about the user's request, your progress, and decide on the next immediate action to take. Do not plan multiple steps ahead; focus only on the very next action. If you notice you are repeating the same action with the same parameters, stop and reconsider your approach.
-Action: Output a single JSON object representing the tool you want to use and its input. The JSON should have 'name' for the tool and 'input' for its parameters. If you have gathered enough information to provide a final answer, use the tool named 'final_answer' with the user-facing response as the input.
+Action: Output a single JSON object representing the tool you want to use and its input. The JSON should have 'name' for the tool and 'input' for its parameters. CRITICAL: When you have gathered enough information to provide a final answer OR when you recognize that all tasks and actions have been completed/finished/terminated, you MUST use the tool named 'final_answer' with the user-facing response as the input immediately - this signals the end of the interaction.
 Action Input: A JSON object with the parameters for the action.
 
 You have access to the following tools:
