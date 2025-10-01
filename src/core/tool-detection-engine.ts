@@ -142,13 +142,7 @@ export class ToolDetectionEngine {
       return 'enter-react';
     }
     
-    // Verifica se a conversa está retornando a um estado conversacional
-    if (currentContext.length > 0 && this.isConversationalResponse(userMessage)) {
-      debugLog(`  Returning: continue-chat (conversational response)`);
-      return 'continue-chat';
-    }
-    
-    // Caso contrário, mantém o estado atual
+    // Caso contrário, mantém o estado atual ou continua em chat
     debugLog(`  Returning: continue-chat (default)`);
     return 'continue-chat';
   }

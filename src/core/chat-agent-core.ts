@@ -28,6 +28,12 @@ interface ReActStep {
   timestamp: Date;
 }
 
+interface ReActToolExecution {
+  actionName: string;
+  actionInput: any;
+  timestamp: Date;
+}
+
 interface ReActProcess {
   taskId: string;
   taskDescription: string;
@@ -36,6 +42,10 @@ interface ReActProcess {
   status: 'running' | 'completed' | 'failed';
   startTime: Date;
   endTime?: Date;
+  // Novas propriedades para detecção de loops
+  toolExecutions?: ReActToolExecution[];
+  loopWarningIssued?: boolean;
+  consecutiveActionsAfterWarning?: number;
 }
 
 // Interface para a configuração do agente
@@ -292,56 +302,131 @@ constructor(config: AgentConfig) {
       // Removido limite máximo de passos para permitir execução ilimitada
       while (true) {
         // Verificar se há loops nas ações recentes
-        const loopDetection = this.detectActionLoop(reactProcess.steps);
-        if (reactProcess.steps.length >= 3 && loopDetection.detected) {
-          // Adicionar mensagem do sistema informando sobre o loop
-          const loopMessage = {
-            role: 'system',
-            content: `ATENÇÃO: Você está repetindo a mesma ação (${loopDetection.actionName}) três vezes consecutivas. Isso indica que você entrou em um loop. Por favor, reavalie sua estratégia e tente uma abordagem diferente.`
-          };
-          
-          // Adicionar a mensagem do sistema ao histórico temporário
-          const historyWithLoopWarning = [...history, loopMessage];
-          
-          // Forçar reavaliação quando loop é detectado
-          console.log('[Loop Detectado] Forçando reavaliação da estratégia...');
-          // Adicionar instrução especial para re-pensar
-          const reThinkPrompt = this.generateReActPrompt(
-            message, 
-            toolsDescription, 
-            reactProcess.steps,
-            historyWithLoopWarning
-          );
-          
-          // Chamar LLM para reavaliar
-          const reThinkResponse = await this.callProviderFunction(reThinkPrompt, dynamicConfig);
-          const reThinkParsed = this.parseReActResponse(reThinkResponse);
-          
-          // Adicionar passo de reavaliação
-          const reThinkStep: ReActStep = {
-            stepNumber: step + 1,
-            thought: `[Reavaliação] ${reThinkParsed.thought}`,
-            action: reThinkParsed.action,
-            timestamp: new Date()
-          };
-          
-          reactProcess.steps.push(reThinkStep);
-          
-          // Se ainda houver ação após reavaliação, continuar normalmente
-          if (reThinkParsed.action) {
-            // Log do pensamento de reavaliação
-            console.log(`[Reavaliação] ${reThinkParsed.thought}`);
+        const loopDetection = this.detectActionLoop(reactProcess);
+        if (reactProcess.toolExecutions && reactProcess.toolExecutions.length >= 3 && loopDetection.detected) {
+          // Verificar se já foi emitido aviso de loop
+          if (!reactProcess.loopWarningIssued) {
+            // Emitir aviso de loop e permitir 3 ações para contornar
+            reactProcess.loopWarningIssued = true;
+            reactProcess.consecutiveActionsAfterWarning = 0;
+            
+            // Adicionar mensagem do sistema informando sobre o loop
+            const loopMessage = {
+              role: 'system',
+              content: `ATENÇÃO: Você está repetindo a mesma ação (${loopDetection.actionName}) três vezes consecutivas com os mesmos parâmetros. Isso indica que você entrou em um loop. Por favor, reavalie sua estratégia e tente uma abordagem diferente. Você tem 3 ações para contornar esta situação.`
+            };
+            
+            // Adicionar a mensagem do sistema ao histórico temporário
+            const historyWithLoopWarning = [...history, loopMessage];
+            
+            // Forçar reavaliação quando loop é detectado
+            console.log('[Loop Detectado] Forçando reavaliação da estratégia...');
+            // Adicionar instrução especial para re-pensar
+            const reThinkPrompt = this.generateReActPrompt(
+              message, 
+              toolsDescription, 
+              reactProcess.steps,
+              historyWithLoopWarning
+            );
+            
+            // Chamar LLM para reavaliar
+            const reThinkResponse = await this.callProviderFunction(reThinkPrompt, dynamicConfig);
+            
+            // Validar se a resposta de reavaliação segue o formato ReAct esperado
+            const reThinkFormatValidation = this.validateReActFormat(reThinkResponse);
+            
+            let reThinkParsed;
+            if (!reThinkFormatValidation.isValid && !reThinkResponse.trim().startsWith('Final Answer:')) {
+              // Se o formato não for válido e não for uma resposta final, tentar reintegração
+              console.log(`[FORMATO INCORRETO NA REAVALIAÇÃO] Resposta não segue o formato ReAct esperado. Elementos faltando: ${reThinkFormatValidation.missingElements.join(', ')}`);
+              
+              // Enviar mensagem de correção para o LLM
+              const correctionMessage = {
+                role: 'system',
+                content: `ATENÇÃO: Você saiu do formato ReAct. Por favor, retorne ao formato estruturado:
+- Comece com "Thought:" seguido pelo seu raciocínio
+- Em seguida, "Action:" com o nome da ferramenta
+- Finalmente, "Action Input:" com os parâmetros em formato JSON
+Formato esperado: Thought: [seu pensamento]\nAction: [nome_da_ferramenta]\nAction Input: {"parâmetros": "valores"}`.replace(/\n/g, '\\n')
+              };
+              
+              // Adicionar mensagem de correção ao histórico e tentar novamente
+              const reThinkCorrectionHistory = [...history, correctionMessage];
+              const reThinkCorrectedPrompt = this.generateReActPrompt(
+                message, 
+                toolsDescription, 
+                reactProcess.steps,
+                reThinkCorrectionHistory
+              );
+              
+              // Obter nova resposta com formato correto
+              const reThinkCorrectedResponse = await this.callProviderFunction(reThinkCorrectedPrompt, dynamicConfig);
+              reThinkParsed = this.parseReActResponse(reThinkCorrectedResponse);
+              
+              console.log(`[TENTATIVA DE CORREÇÃO NA REAVALIAÇÃO] Nova resposta recebida: ${reThinkCorrectedResponse.substring(0, 100)}...`);
+            } else {
+              reThinkParsed = this.parseReActResponse(reThinkResponse);
+            }
+            
+            // Adicionar passo de reavaliação
+            const reThinkStep: ReActStep = {
+              stepNumber: step + 1,
+              thought: `[Reavaliação] ${reThinkParsed.thought}`,
+              action: reThinkParsed.action,
+              timestamp: new Date()
+            };
+            
+            reactProcess.steps.push(reThinkStep);
+            
+            // Se ainda houver ação após reavaliação, continuar normalmente
+            if (reThinkParsed.action) {
+              // Log do pensamento de reavaliação
+              console.log(`[Reavaliação] ${reThinkParsed.thought}`);
+            }
+          } else if (reactProcess.consecutiveActionsAfterWarning !== undefined && 
+                    reactProcess.consecutiveActionsAfterWarning >= 3) {
+            // Se já foram 3 ações após o aviso e ainda estamos em loop, interromper
+            console.log('[Loop Persistente] Limite de 3 ações após aviso de loop atingido. Encerrando modo ReAct.');
+            
+            const loopTerminationMessage = {
+              role: 'system',
+              content: `Você excedeu o limite de 3 ações após o aviso de loop. O modo ReAct será interrompido para permitir intervenção humana.`
+            };
+            
+            // Adicionar mensagem de término ao histórico
+            const historyWithTermination = [...history, loopTerminationMessage];
+            
+            // Gerar prompt final informando sobre a interrupção
+            const terminationPrompt = `O modo ReAct está sendo interrompido devido à detecção de loop persistente. Por favor, forneça uma resposta final para a tarefa original: ${message}`;
+            
+            const terminationResponse = await this.callProviderFunction(terminationPrompt, dynamicConfig);
+            
+            // Encerrar processo e retornar ao modo chat
+            reactProcess.status = 'completed';
+            reactProcess.endTime = new Date();
+            this.memoryManager.setVariable(`react_process_${processId}`, reactProcess);
+            this.config.mode = 'chat';
+            
+            return terminationResponse;
           }
         }
         
         // Criar prompt ReAct com contexto atual
         // Se houve detecção de loop, usar o histórico com a mensagem de aviso
-        const currentHistory = (reactProcess.steps.length >= 3 && loopDetection.detected) 
-          ? [...history, {
+        let currentHistory = history;
+        if (reactProcess.toolExecutions && reactProcess.toolExecutions.length >= 3 && loopDetection.detected) {
+          if (reactProcess.loopWarningIssued) {
+            currentHistory = [...history, {
               role: 'system',
-              content: `ATENÇÃO: Você está repetindo a mesma ação (${loopDetection.actionName}) três vezes consecutivas. Isso indica que você entrou em um loop. Por favor, reavalie sua estratégia e tente uma abordagem diferente.`
-            }]
-          : history;
+              content: `ATENÇÃO: Você está repetindo a mesma ação (${loopDetection.actionName}) três vezes consecutivas com os mesmos parâmetros. Isso indica que você entrou em um loop. Por favor, reavalie sua estratégia e tente uma abordagem diferente. Você tem ${3 - (reactProcess.consecutiveActionsAfterWarning || 0)} ações restantes para contornar esta situação.`
+            }];
+          } else {
+            currentHistory = [...history, {
+              role: 'system',
+              content: `ATENÇÃO: Você está repetindo a mesma ação (${loopDetection.actionName}) três vezes consecutivas com os mesmos parâmetros. Isso indica que você entrou em um loop. Por favor, reavalie sua estratégia e tente uma abordagem diferente.`
+            }];
+          }
+        }
           
         const reactPrompt = this.generateReActPrompt(
           message, 
@@ -353,8 +438,42 @@ constructor(config: AgentConfig) {
 // Chamar LLM para gerar próximo passo
         const llmResponse = await this.callProviderFunction(reactPrompt, dynamicConfig);
         
-        // Parse da resposta para extrair Thought/Action
-        const parsedResponse = this.parseReActResponse(llmResponse);
+        // Validar se a resposta segue o formato ReAct esperado
+        const formatValidation = this.validateReActFormat(llmResponse);
+        
+        let parsedResponse;
+        if (!formatValidation.isValid && !llmResponse.trim().startsWith('Final Answer:')) {
+          // Se o formato não for válido e não for uma resposta final, tentar reintegração
+          console.log(`[FORMATO INCORRETO] Resposta não segue o formato ReAct esperado. Elementos faltando: ${formatValidation.missingElements.join(', ')}`);
+          
+          // Enviar mensagem de correção para o LLM
+          const correctionMessage = {
+            role: 'system',
+            content: `ATENÇÃO: Você saiu do formato ReAct. Por favor, retorne ao formato estruturado:
+- Comece com "Thought:" seguido pelo seu raciocínio
+- Em seguida, "Action:" com o nome da ferramenta
+- Finalmente, "Action Input:" com os parâmetros em formato JSON
+Formato esperado: Thought: [seu pensamento]\nAction: [nome_da_ferramenta]\nAction Input: {"parâmetros": "valores"}`.replace(/\n/g, '\\n')
+          };
+          
+          // Adicionar mensagem de correção ao histórico e tentar novamente
+          const correctionHistory = [...currentHistory, correctionMessage];
+          const correctedPrompt = this.generateReActPrompt(
+            message, 
+            toolsDescription, 
+            reactProcess.steps,
+            correctionHistory
+          );
+          
+          // Obter nova resposta com formato correto
+          const correctedResponse = await this.callProviderFunction(correctedPrompt, dynamicConfig);
+          parsedResponse = this.parseReActResponse(correctedResponse);
+          
+          console.log(`[TENTATIVA DE CORREÇÃO] Nova resposta recebida: ${correctedResponse.substring(0, 100)}...`);
+        } else {
+          // Parse da resposta padrão
+          parsedResponse = this.parseReActResponse(llmResponse);
+        }
         
         // Log da resposta do LLM e parseada para debug (apenas se DEBUG=true ou ENABLE_DEBUG=true)
         if (process.env.DEBUG === 'true' || process.env.ENABLE_DEBUG === 'true') {
@@ -391,6 +510,22 @@ constructor(config: AgentConfig) {
             // Retornar ao modo chat após término
             this.config.mode = 'chat';
             return reactProcess.finalAnswer || "Resposta final fornecida.";
+          }
+          
+          // Registrar execução da ferramenta para detecção de loops
+          if (!reactProcess.toolExecutions) {
+            reactProcess.toolExecutions = [];
+          }
+          
+          reactProcess.toolExecutions.push({
+            actionName: parsedResponse.action.name,
+            actionInput: parsedResponse.action.input,
+            timestamp: new Date()
+          });
+          
+          // Atualizar contador de ações consecutivas após aviso de loop, se aplicável
+          if (reactProcess.loopWarningIssued) {
+            reactProcess.consecutiveActionsAfterWarning = (reactProcess.consecutiveActionsAfterWarning || 0) + 1;
           }
           
           // Verificar se a ferramenta existe no registry antes de executar
@@ -468,31 +603,31 @@ constructor(config: AgentConfig) {
     }
   }
   
-// Método para detectar loops em ações recentes
-  private detectActionLoop(steps: ReActStep[]): { detected: boolean; actionName?: string } {
-    // Verificar se temos pelo menos 3 passos
-    if (steps.length < 3) {
+// Método para detectar loops em execuções de ferramentas
+  private detectActionLoop(process: ReActProcess): { detected: boolean; actionName?: string } {
+    // Verificar se temos execuções suficientes para comparação
+    if (!process.toolExecutions || process.toolExecutions.length < 3) {
       return { detected: false };
     }
     
-    // Verificar os últimos 3 passos
-    const recentSteps = steps.slice(-3);
+    // Verificar as últimas 3 execuções
+    const recentExecutions = process.toolExecutions.slice(-3);
     
-    // Verificar se todos têm a mesma action
-    if (recentSteps[0].action && recentSteps[1].action && recentSteps[2].action) {
-      const action1 = recentSteps[0].action;
-      const action2 = recentSteps[1].action;
-      const action3 = recentSteps[2].action;
+    // Verificar se todas têm a mesma action com os mesmos parâmetros
+    if (recentExecutions[0] && recentExecutions[1] && recentExecutions[2]) {
+      const exec1 = recentExecutions[0];
+      const exec2 = recentExecutions[1];
+      const exec3 = recentExecutions[2];
       
       // Verificar se é a mesma action com os mesmos parâmetros
-      if (action1.name === action2.name && action2.name === action3.name) {
-        // Comparar parâmetros (simplificado)
-        const input1 = JSON.stringify(action1.input);
-        const input2 = JSON.stringify(action2.input);
-        const input3 = JSON.stringify(action3.input);
+      if (exec1.actionName === exec2.actionName && exec2.actionName === exec3.actionName) {
+        // Comparar parâmetros
+        const input1 = JSON.stringify(exec1.actionInput);
+        const input2 = JSON.stringify(exec2.actionInput);
+        const input3 = JSON.stringify(exec3.actionInput);
         
         if (input1 === input2 && input2 === input3) {
-          return { detected: true, actionName: action1.name }; // Loop detectado
+          return { detected: true, actionName: exec1.actionName }; // Loop detectado
         }
       }
     }
@@ -546,16 +681,14 @@ constructor(config: AgentConfig) {
     isFinalAnswer: boolean;
     finalAnswer?: string;
   } {
-    // Esta é uma implementação simplificada
-    // Em produção, você pode querer usar uma abordagem mais robusta com regex ou parsing
-    
+    // Esta é uma implementação mais robusta com validação de formato
     const lines = response.split('\n');
     let thought = '';
     let action: ReActAction | undefined;
     let isFinalAnswer = false;
     let finalAnswer = '';
     
-    // Extrair Thought (primeira linha que começa com "Thought:")
+    // Extrair Thought (linha que começa com "Thought:")
     const thoughtLine = lines.find(line => line.trim().startsWith('Thought:'));
     if (thoughtLine) {
       thought = thoughtLine.replace('Thought:', '').trim();
@@ -591,6 +724,32 @@ constructor(config: AgentConfig) {
     }
     
     return { thought, action, isFinalAnswer, finalAnswer };
+  }
+
+  // Método para validar se a resposta segue o formato ReAct esperado
+  private validateReActFormat(response: string): { isValid: boolean; missingElements: string[] } {
+    const lines = response.split('\n');
+    const hasThought = lines.some(line => line.trim().startsWith('Thought:'));
+    const hasAction = lines.some(line => line.trim().startsWith('Action:'));
+    const hasActionInput = lines.some(line => line.trim().startsWith('Action Input:'));
+    
+    const missingElements: string[] = [];
+    if (!hasThought) missingElements.push('Thought');
+    if (!hasAction) missingElements.push('Action');
+    if (!hasActionInput) missingElements.push('Action Input');
+    
+    // Respostas finais são uma exceção - podem não ter Action/Action Input
+    const hasFinalAnswer = lines.some(line => line.trim().startsWith('Final Answer:'));
+    
+    const isValid = (hasThought && hasAction && hasActionInput) || hasFinalAnswer;
+    
+    return { isValid, missingElements };
+  }
+
+  // Método para verificar se uma resposta está em formato ReAct estruturado
+  private isStructuredReActResponse(response: string): boolean {
+    const { isValid } = this.validateReActFormat(response);
+    return isValid;
   }
 
   // Método para executar o modo de Planejamento com modelos de thinking

@@ -3,6 +3,7 @@ import { HybridPromptBuilder } from './hybrid-prompt-builder';
 import { ToolDetectionEngine } from './tool-detection-engine';
 import { AdaptiveExecutor } from './adaptive-executor';
 import { debugLog, conditionalLog } from '../utils/debug-logger';
+import { finalAnswerTool } from '../tools/final-answer-tool';
 
 /**
  * Agente híbrido adaptativo que combina conversação fluida com execução estruturada de ações
@@ -29,6 +30,9 @@ export class HybridAgent {
     this.hybridPromptBuilder = new HybridPromptBuilder();
     this.toolDetectionEngine = new ToolDetectionEngine();
     this.adaptiveExecutor = new AdaptiveExecutor();
+    
+    // Registrar automaticamente a ferramenta final_answer
+    this.registerTool(finalAnswerTool);
   }
 
   /**
@@ -152,5 +156,12 @@ export class HybridAgent {
    */
   getHybridState(): 'chat' | 'react' {
     return this.hybridState;
+  }
+
+  /**
+   * Obtém a lista de ferramentas registradas
+   */
+  listTools(): Tool[] {
+    return Array.from(this.toolRegistry.values());
   }
 }
